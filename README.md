@@ -29,12 +29,32 @@ them. For example:
 .\pptx-to-letter-pdf.exe presentation.pptx --overwrite
 ```
 
-To create a new release, push a version tag such as `v1.0.0`. GitHub Actions
-installs the pinned Python dependencies, runs unit tests, downloads and
-verifies the LibreOffice MSI checksum, extracts its runtime, and embeds it in
-the Windows x64 executable. If `test-data/test.pptx` is present in the
-repository, the workflow converts it with the packaged executable and checks
-the resulting PDF before attaching the executable ZIP to a GitHub Release.
+Every push to `main` runs unit tests and builds the Windows x64 executable.
+Normal commits upload `pdf-standardizer-windows-x64.zip` as a GitHub Actions
+artifact, available for 14 days. When a release PR is merged, the same build
+run attaches the ZIP to the new GitHub Release.
+
+Releases use Semantic Versioning and Conventional Commits. Release Please
+opens or updates a release PR with the version bump and changelog. Merge that
+PR to create the version tag and GitHub Release; that run builds the executable
+and uploads the ZIP to the release. The initial version is `0.1.0`.
+
+For Release Please to open its PR, enable **Settings → Actions → General →
+Workflow permissions → Allow GitHub Actions to create and approve pull
+requests** in the repository.
+
+Use commit prefixes to select the version bump:
+
+- `fix: ...` for a patch release, such as `0.1.0` to `0.1.1`
+- `feat: ...` for a minor release, such as `0.1.0` to `0.2.0`
+- Add `!` after the type (for example, `feat!:`) or a `BREAKING CHANGE:`
+  footer for a major release, such as `0.1.0` to `1.0.0`
+
+GitHub Actions installs the pinned Python dependencies, downloads and verifies
+the LibreOffice MSI checksum, extracts its runtime, and embeds it in the
+executable. If `test-data/test.pptx` is present in the repository, the workflow
+converts it with the packaged executable and checks the resulting PDF before
+publishing or uploading the build.
 
 ## Build locally
 

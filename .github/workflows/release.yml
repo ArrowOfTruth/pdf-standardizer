@@ -2,14 +2,29 @@ name: Build and release Windows executable
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - name: Create or update release PR
+        id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
   build:
+    needs: release-please
     runs-on: windows-latest
     steps:
       - name: Check out source
@@ -108,6 +123,16 @@ jobs:
             -CompressionLevel Optimal
 
       - name: Publish GitHub Release
+        if: needs.release-please.outputs.release_created == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$env:GITHUB_REF_NAME" dist/pdf-standardizer-windows-x64.zip --generate-notes
+        run: gh release upload "${{ needs.release-please.outputs.tag_name }}" dist/pdf-standardizer-windows-x64.zip --clobber
+
+      - name: Upload main-branch build artifact
+        if: needs.release-please.outputs.release_created != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-standardizer-windows-x64-${{ github.sha }}
+          path: dist/pdf-standardizer-windows-x64.zip
+          if-no-files-found: error
+          retention-days: 14
