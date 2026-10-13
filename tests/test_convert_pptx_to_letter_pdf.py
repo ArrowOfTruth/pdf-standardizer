@@ -106,8 +106,24 @@ class LibreOfficeExportTests(unittest.TestCase):
 class FitToPagesTests(unittest.TestCase):
     """Tests for PDF page sizing and slide transformations."""
 
-    def test_fits_pages_and_preserves_page_count(self) -> None:
-        """Fit content while preserving source page count and output dimensions."""
+    def test_adds_empty_page_when_source_has_no_pages(self) -> None:
+        """Produce the configured blank page even for an empty source PDF."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_path = Path(temp_dir) / "source.pdf"
+            output_path = Path(temp_dir) / "output.pdf"
+            with source_path.open("wb") as source_file:
+                PdfWriter().write(source_file)
+
+            converter.fit_to_pages(source_path, output_path, 4, 3, 0.5)
+
+            reader = PdfReader(str(output_path))
+            self.assertEqual(len(reader.pages), 1)
+            self.assertEqual(float(reader.pages[0].mediabox.width), 288)
+            self.assertEqual(float(reader.pages[0].mediabox.height), 216)
+            self.assertIsNone(reader.pages[0].get_contents())
+
+    def test_fits_pages_and_appends_empty_page(self) -> None:
+        """Fit source pages and append one empty page with matching dimensions."""
         with tempfile.TemporaryDirectory() as temp_dir:
             source_path = Path(temp_dir) / "source.pdf"
             output_path = Path(temp_dir) / "output.pdf"
@@ -123,13 +139,14 @@ class FitToPagesTests(unittest.TestCase):
             converter.fit_to_pages(source_path, output_path, 4, 3, 0.5)
 
             reader = PdfReader(str(output_path))
-            self.assertEqual(len(reader.pages), 2)
+            self.assertEqual(len(reader.pages), 3)
             for page in reader.pages:
                 self.assertEqual(float(page.mediabox.width), 288)
                 self.assertEqual(float(page.mediabox.height), 216)
+            self.assertIsNone(reader.pages[-1].get_contents())
 
             matrices = []
-            for page in reader.pages:
+            for page in reader.pages[:-1]:
                 content = ContentStream(page.get_contents(), reader)
                 matrices.extend(
                     tuple(float(value) for value in operands)

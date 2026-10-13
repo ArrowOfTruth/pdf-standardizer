@@ -22,6 +22,9 @@ Microsoft PowerPoint, especially when presentations rely on fonts or features
 that LibreOffice does not support. The bundled LibreOffice distribution is
 unmodified and its license notices are included in the ZIP.
 
+Each output PDF ends with one additional empty page using the same page size as
+the converted slides.
+
 Existing PDF outputs are preserved by default. Pass `--overwrite` to replace
 them. For example:
 

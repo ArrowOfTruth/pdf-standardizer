@@ -153,11 +153,12 @@ def fit_to_pages(
     page_height: float,
     max_vertical_ratio: float,
 ) -> None:
-    """Fit each source PDF page on a custom-sized page, anchored at upper left.
+    """Fit source pages to custom pages and append one empty page.
 
     Args:
         source_path: PDF to read. Page dimensions are interpreted in points.
-        output_path: Destination PDF path. An existing file is overwritten.
+        output_path: Destination PDF path. An existing file is overwritten. The
+            output always ends with one additional empty page.
         page_width: Output page width in inches.
         page_height: Output page height in inches.
         max_vertical_ratio: Maximum fraction of output page height occupied by
@@ -199,6 +200,8 @@ def fit_to_pages(
             over=True,
             expand=False,
         )
+
+    writer.add_blank_page(width=page_width_points, height=page_height_points)
 
     with output_path.open("wb") as f:
         writer.write(f)
