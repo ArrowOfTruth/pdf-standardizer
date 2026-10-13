@@ -28,10 +28,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -134,7 +134,7 @@ jobs:
 
       - name: Upload main-branch build artifact
         if: needs.release-please.outputs.release_created != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pdf-standardizer-windows-x64-${{ github.sha }}
           path: dist/pdf-standardizer-windows-x64.zip
