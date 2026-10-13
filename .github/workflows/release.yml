@@ -1,0 +1,38 @@
+name: Build and release Windows executable
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-build.txt
+
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Build executable
+        run: pyinstaller --noconfirm --clean --onefile --name pptx-to-letter-pdf convert_pptx_to_letter_pdf.py
+
+      - name: Verify executable
+        run: ./dist/pptx-to-letter-pdf.exe --help
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$env:GITHUB_REF_NAME" dist/pptx-to-letter-pdf.exe --generate-notes
