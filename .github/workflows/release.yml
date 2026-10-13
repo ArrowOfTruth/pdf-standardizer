@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Create or update release PR
         id: release
-        uses: googleapis/release-please-action@v4
+        uses: googleapis/release-please-action@v5
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
@@ -75,7 +75,11 @@ jobs:
             throw "LibreOffice extraction did not contain soffice.com."
           }
           $installRoot = $soffice.Directory.Parent
+          New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destination) | Out-Null
           Move-Item -LiteralPath $installRoot.FullName -Destination $destination
+          if (-not (Test-Path -LiteralPath (Join-Path $destination "program\soffice.com") -PathType Leaf)) {
+            throw "LibreOffice runtime was not placed at the expected destination."
+          }
           & (Join-Path $destination "program\soffice.com") --headless --version
           if ($LASTEXITCODE -ne 0) {
             throw "The bundled LibreOffice runtime failed its version check."
