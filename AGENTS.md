@@ -20,11 +20,23 @@
 - Keep tests portable to the Windows GitHub Actions runner. In particular,
   compare normalized paths rather than relying on Windows path casing or
   8.3-name spelling.
+- Run the sample end-to-end check with the bundled executable:
+  `.\dist\pptx-to-letter-pdf.exe .\test-data\test.pptx --overwrite`
+  The generated `test-data\test.pdf` is ignored; verify it is valid, every page
+  has the configured dimensions, and it ends with one blank page.
 
 ## Builds and releases
 
 - The GitHub Actions workflow builds and tests on pushes to `main`. Preserve the
   bundled LibreOffice conversion check using `test-data/test.pptx`.
+- For a local release-like build on Windows, install dependencies with
+  `python -m pip install -r requirements-build.txt`, then follow the workflow's
+  LibreOffice download, SHA-256 verification, and extraction steps to stage the
+  runtime at `dist\LibreOffice`. Build with:
+  `pyinstaller --noconfirm --clean --onefile --name pptx-to-letter-pdf --add-data "dist\LibreOffice;LibreOffice" convert_pptx_to_letter_pdf.py`
+  The executable is written to `dist\pptx-to-letter-pdf.exe`. Run the fixture
+  check above after building. The README also documents a simpler build using
+  an installed LibreOffice runtime.
 - Verify the LibreOffice download checksum before extracting or packaging it.
 - Use Conventional Commit prefixes so Release Please can select the SemVer
   bump: `fix:` for patch, `feat:` for minor, and `!` or a `BREAKING CHANGE:`

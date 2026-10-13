@@ -72,6 +72,20 @@ The executable is written to `dist\pptx-to-letter-pdf.exe` with LibreOffice
 embedded. To embed a non-standard LibreOffice installation, replace the
 `$env:ProgramFiles\LibreOffice` source path with its install directory.
 
+### Test with the sample presentation
+
+The tracked sample presentation is `test-data\test.pptx`. Convert it with the
+local executable:
+
+```powershell
+.\dist\pptx-to-letter-pdf.exe .\test-data\test.pptx --overwrite
+```
+
+This writes `test-data\test.pdf`. The generated PDF is ignored by Git. Check
+that the PDF opens, its pages have the configured output dimensions, and it
+ends with one empty page matching the other pages' size. The GitHub Actions
+workflow currently checks that this conversion produces a non-empty PDF.
+
 To use a separately installed LibreOffice without embedding it, pass the path
 to `soffice.com`:
 
