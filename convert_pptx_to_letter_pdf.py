@@ -1,90 +1,149 @@
 #!/usr/bin/env python3
 """Convert PowerPoint presentations to top-left-aligned PDF pages.
 
-Requires Microsoft PowerPoint for Windows and the Python package ``pypdf``
-(``python -m pip install -r requirements.txt``). PowerPoint renders the slides
-to an intermediate PDF; Python then applies the page size and placement. Defaults
-to 17-by-10-inch pages, with slides limited to 75% of page height.
+Requires LibreOffice Impress and the Python package ``pypdf``
+(``python -m pip install -r requirements.txt``). The Windows release ZIP
+includes LibreOffice. Impress renders slides to an intermediate PDF; Python
+then applies the page size and placement. Defaults to 17-by-10-inch pages, with
+slides limited to 75% of page height.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
+import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
 from pypdf import PdfReader, PdfWriter, Transformation
 
-POWERPOINT_TIMEOUT_SECONDS = 300
+LIBREOFFICE_TIMEOUT_SECONDS = 300
 
 
-def export_with_powerpoint(pptx_path: Path, pdf_path: Path) -> None:
-    """Render a PowerPoint presentation to PDF using PowerPoint for Windows.
+def find_libreoffice(explicit_path: Path | None = None) -> Path:
+    """Find the LibreOffice command-line executable.
+
+    Args:
+        explicit_path: Optional path to ``soffice.com`` or ``soffice.exe``.
+
+    Raises:
+        FileNotFoundError: If LibreOffice cannot be found.
+
+    Notes:
+        The application searches beside the script or executable first, then
+        the system PATH and standard Windows installation folders.
+    """
+    if explicit_path is not None:
+        executable = explicit_path.expanduser().resolve()
+        if executable.is_file():
+            return executable
+        raise FileNotFoundError(f"LibreOffice executable not found: {executable}")
+
+    if getattr(sys, "frozen", False):
+        application_dir = Path(sys.executable).resolve().parent
+        bundle_dir = Path(getattr(sys, "_MEIPASS", application_dir))
+        candidates = [
+            bundle_dir / "LibreOffice" / "program" / "soffice.com",
+            bundle_dir / "LibreOffice" / "program" / "soffice.exe",
+            application_dir / "LibreOffice" / "program" / "soffice.com",
+            application_dir / "LibreOffice" / "program" / "soffice.exe",
+        ]
+    else:
+        application_dir = Path(__file__).resolve().parent
+        candidates = [
+            application_dir / "LibreOffice" / "program" / "soffice.com",
+            application_dir / "LibreOffice" / "program" / "soffice.exe",
+        ]
+    for name in ("soffice.com", "soffice.exe"):
+        path_from_path = shutil.which(name)
+        if path_from_path:
+            candidates.append(Path(path_from_path))
+
+    for variable in ("PROGRAMFILES", "PROGRAMFILES(X86)"):
+        program_files = os.environ.get(variable)
+        if program_files:
+            candidates.extend(
+                Path(program_files) / "LibreOffice" / "program" / name
+                for name in ("soffice.com", "soffice.exe")
+            )
+
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError(
+        "LibreOffice was not found. Build or extract the complete release "
+        "package, install LibreOffice, or pass its executable with "
+        "--libreoffice."
+    )
+
+
+def export_with_libreoffice(
+    pptx_path: Path,
+    pdf_path: Path,
+    libreoffice_path: Path,
+) -> None:
+    """Render a PowerPoint presentation to PDF using LibreOffice Impress.
 
     Args:
         pptx_path: Path to the source PowerPoint presentation.
-        pdf_path: Destination path for PowerPoint's intermediate PDF.
+        pdf_path: Destination path for the intermediate PDF.
+        libreoffice_path: Path to ``soffice.com`` or ``soffice.exe``.
 
     Raises:
-        RuntimeError: If PowerPoint fails, times out, or does not create the PDF.
-        OSError: If the temporary PowerShell script cannot be created or removed.
+        RuntimeError: If LibreOffice fails, times out, or creates no PDF.
+        OSError: If temporary directories cannot be created or the PDF cannot
+            be copied to its destination.
 
     Notes:
-        Microsoft PowerPoint and Windows PowerShell must be installed. Export
-        is limited to 300 seconds to avoid hanging indefinitely.
+        A temporary LibreOffice profile isolates each conversion from running
+        LibreOffice instances. Export is limited to 300 seconds.
     """
-    powershell_script = r'''
-param([string]$InputPath, [string]$OutputPath)
-$ErrorActionPreference = 'Stop'
-$powerpoint = $null
-$presentation = $null
-try {
-    $powerpoint = New-Object -ComObject PowerPoint.Application
-    $presentation = $powerpoint.Presentations.Open($InputPath, $true, $false, $false)
-    # ppSaveAsPDF = 32. Preserve PowerPoint's rendering of slide content.
-    $presentation.SaveAs($OutputPath, 32)
-}
-finally {
-    if ($presentation -ne $null) { $presentation.Close() }
-    if ($powerpoint -ne $null) { $powerpoint.Quit() }
-    if ($presentation -ne $null) { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($presentation) }
-    if ($powerpoint -ne $null) { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($powerpoint) }
-}
-'''
-    with tempfile.NamedTemporaryFile("w", suffix=".ps1", encoding="utf-8", delete=False) as f:
-        f.write(powershell_script)
-        script_path = Path(f.name)
-    try:
-        result = subprocess.run(
-            [
-                "powershell.exe",
-                "-NoProfile",
-                "-STA",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-File",
-                str(script_path),
-                str(pptx_path),
-                str(pdf_path),
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=POWERPOINT_TIMEOUT_SECONDS,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(
-            f"PowerPoint PDF export timed out after "
-            f"{POWERPOINT_TIMEOUT_SECONDS} seconds for {pptx_path}."
-        ) from exc
-    finally:
-        script_path.unlink(missing_ok=True)
-    if result.returncode != 0:
-        detail = result.stderr.strip() or result.stdout.strip()
-        raise RuntimeError(f"PowerPoint PDF export failed: {detail}")
-    if not pdf_path.exists():
-        raise RuntimeError("PowerPoint completed without creating the intermediate PDF.")
+    with tempfile.TemporaryDirectory(prefix="pptx_pdf_") as temp_dir:
+        temp_path = Path(temp_dir)
+        profile_path = temp_path / "profile"
+        exported_pdf = temp_path / f"{pptx_path.stem}.pdf"
+        command = [
+            str(libreoffice_path),
+            "--headless",
+            "--nologo",
+            "--nodefault",
+            "--nolockcheck",
+            "--norestore",
+            f"-env:UserInstallation={profile_path.as_uri()}",
+            "--convert-to",
+            "pdf:impress_pdf_Export",
+            "--outdir",
+            str(temp_path),
+            str(pptx_path),
+        ]
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=LIBREOFFICE_TIMEOUT_SECONDS,
+                cwd=libreoffice_path.parent,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                f"LibreOffice PDF export timed out after "
+                f"{LIBREOFFICE_TIMEOUT_SECONDS} seconds for {pptx_path}."
+            ) from exc
+
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip()
+            raise RuntimeError(f"LibreOffice PDF export failed: {detail}")
+        if not exported_pdf.is_file():
+            detail = result.stderr.strip() or result.stdout.strip()
+            message = f"LibreOffice did not create a PDF for {pptx_path}."
+            if detail:
+                message = f"{message} {detail}"
+            raise RuntimeError(message)
+        shutil.copy2(exported_pdf, pdf_path)
 
 
 def fit_to_pages(
@@ -191,6 +250,12 @@ def main() -> None:
         action="store_true",
         help="Replace existing PDF output files",
     )
+    parser.add_argument(
+        "--libreoffice",
+        type=Path,
+        metavar="PATH",
+        help="Path to LibreOffice soffice.com or soffice.exe",
+    )
     args = parser.parse_args()
 
     input_path = args.input.expanduser().resolve()
@@ -214,6 +279,11 @@ def main() -> None:
     else:
         parser.error(f"Input path is neither a file nor a folder: {input_path}")
 
+    try:
+        libreoffice_path = find_libreoffice(args.libreoffice)
+    except FileNotFoundError as exc:
+        parser.error(str(exc))
+
     failures = 0
     for pptx_path in presentations:
         output_path = pptx_path.with_suffix(".pdf")
@@ -224,8 +294,8 @@ def main() -> None:
                     "(pass --overwrite to replace it)"
                 )
             with tempfile.TemporaryDirectory(prefix="pptx_pdf_") as temp_dir:
-                intermediate = Path(temp_dir) / "powerpoint_export.pdf"
-                export_with_powerpoint(pptx_path, intermediate)
+                intermediate = Path(temp_dir) / "libreoffice_export.pdf"
+                export_with_libreoffice(pptx_path, intermediate, libreoffice_path)
                 fit_to_pages(
                     intermediate,
                     output_path,

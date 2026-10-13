@@ -17,31 +17,87 @@ from pypdf.generic import ContentStream
 import convert_pptx_to_letter_pdf as converter
 
 
-class PowerPointExportTests(unittest.TestCase):
-    """Tests for PowerPoint process failure handling."""
+class LibreOfficeExportTests(unittest.TestCase):
+    """Tests for LibreOffice process handling."""
 
-    def test_reports_timeout_and_removes_temporary_script(self) -> None:
-        """Raise a useful error and clean up when PowerPoint exceeds its timeout."""
+    def test_exports_pdf_with_isolated_profile(self) -> None:
+        """Write the generated intermediate PDF to the requested path."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_path = Path(temp_dir) / "presentation.pptx"
+            input_path.touch()
+            output_path = Path(temp_dir) / "presentation.pdf"
+
+            def export_pdf(
+                command: list[str], **kwargs: object
+            ) -> subprocess.CompletedProcess:
+                self.assertEqual(kwargs["timeout"], converter.LIBREOFFICE_TIMEOUT_SECONDS)
+                export_dir = Path(command[command.index("--outdir") + 1])
+                writer = PdfWriter()
+                writer.add_blank_page(width=72, height=72)
+                with (export_dir / "presentation.pdf").open("wb") as pdf_file:
+                    writer.write(pdf_file)
+                return subprocess.CompletedProcess(command, 0, "", "")
+
+            soffice_path = Path(temp_dir) / "soffice.com"
+            with patch.object(
+                converter.subprocess, "run", side_effect=export_pdf
+            ) as run:
+                converter.export_with_libreoffice(input_path, output_path, soffice_path)
+
+            self.assertEqual(len(PdfReader(str(output_path)).pages), 1)
+            command = run.call_args.args[0]
+            self.assertEqual(command[0], str(soffice_path))
+            self.assertIn("--headless", command)
+            self.assertTrue(
+                any(arg.startswith("-env:UserInstallation=file:") for arg in command)
+            )
+            self.assertEqual(
+                run.call_args.kwargs["timeout"],
+                converter.LIBREOFFICE_TIMEOUT_SECONDS,
+            )
+
+    def test_reports_timeout(self) -> None:
+        """Raise a useful error when LibreOffice exceeds its timeout."""
         with tempfile.TemporaryDirectory() as temp_dir:
             input_path = Path(temp_dir) / "presentation.pptx"
             input_path.touch()
             output_path = Path(temp_dir) / "presentation.pdf"
             timeout = subprocess.TimeoutExpired(
-                cmd="powershell.exe",
-                timeout=converter.POWERPOINT_TIMEOUT_SECONDS,
+                cmd="soffice.com",
+                timeout=converter.LIBREOFFICE_TIMEOUT_SECONDS,
             )
-            with patch.object(
-                converter.subprocess, "run", side_effect=timeout
-            ) as run:
+            with patch.object(converter.subprocess, "run", side_effect=timeout):
                 with self.assertRaisesRegex(RuntimeError, "timed out after 300 seconds"):
-                    converter.export_with_powerpoint(input_path, output_path)
+                    converter.export_with_libreoffice(
+                        input_path, output_path, Path("soffice.com")
+                    )
 
-            self.assertEqual(
-                run.call_args.kwargs["timeout"],
-                converter.POWERPOINT_TIMEOUT_SECONDS,
-            )
-            script_path = Path(run.call_args.args[0][6])
-            self.assertFalse(script_path.exists())
+    def test_finds_explicit_libreoffice_executable(self) -> None:
+        """Accept an explicitly selected LibreOffice executable."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            executable = Path(temp_dir) / "soffice.com"
+            executable.touch()
+
+            self.assertEqual(converter.find_libreoffice(executable), executable)
+
+    def test_finds_libreoffice_bundled_inside_executable(self) -> None:
+        """Find LibreOffice in PyInstaller's one-file extraction directory."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            application_dir = Path(temp_dir) / "application"
+            bundle_dir = Path(temp_dir) / "bundle"
+            executable = bundle_dir / "LibreOffice" / "program" / "soffice.com"
+            executable.parent.mkdir(parents=True)
+            executable.touch()
+            with (
+                patch.object(converter.sys, "frozen", True, create=True),
+                patch.object(
+                    converter.sys,
+                    "executable",
+                    str(application_dir / "pptx-to-letter-pdf.exe"),
+                ),
+                patch.object(converter.sys, "_MEIPASS", str(bundle_dir), create=True),
+            ):
+                self.assertEqual(converter.find_libreoffice(), executable)
 
 
 class FitToPagesTests(unittest.TestCase):
@@ -115,7 +171,12 @@ class OutputHandlingTests(unittest.TestCase):
             output_path.write_bytes(b"existing PDF")
             with (
                 patch.object(sys, "argv", ["converter", str(input_path)]),
-                patch.object(converter, "export_with_powerpoint") as export,
+                patch.object(
+                    converter,
+                    "find_libreoffice",
+                    return_value=Path("soffice.com"),
+                ),
+                patch.object(converter, "export_with_libreoffice") as export,
                 contextlib.redirect_stdout(io.StringIO()),
                 self.assertRaises(SystemExit),
             ):
@@ -137,10 +198,21 @@ class OutputHandlingTests(unittest.TestCase):
 
             with (
                 patch.object(
-                    sys, "argv", ["converter", str(input_path), "--overwrite"]
+                    sys,
+                    "argv",
+                    [
+                        "converter",
+                        str(input_path),
+                        "--overwrite",
+                    ],
                 ),
-                patch.object(converter, "export_with_powerpoint"),
+                patch.object(converter, "export_with_libreoffice"),
                 patch.object(converter, "fit_to_pages", side_effect=write_output),
+                patch.object(
+                    converter,
+                    "find_libreoffice",
+                    return_value=Path("soffice.com"),
+                ),
                 contextlib.redirect_stdout(io.StringIO()),
             ):
                 converter.main()
