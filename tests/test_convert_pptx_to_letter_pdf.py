@@ -78,7 +78,10 @@ class LibreOfficeExportTests(unittest.TestCase):
             executable = Path(temp_dir) / "soffice.com"
             executable.touch()
 
-            self.assertEqual(converter.find_libreoffice(executable), executable)
+            self.assertEqual(
+                converter.find_libreoffice(executable),
+                executable.resolve(),
+            )
 
     def test_finds_libreoffice_bundled_inside_executable(self) -> None:
         """Find LibreOffice in PyInstaller's one-file extraction directory."""
