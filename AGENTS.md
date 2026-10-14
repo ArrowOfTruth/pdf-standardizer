@@ -23,7 +23,9 @@
 - Run the sample end-to-end check with the bundled executable:
   `.\dist\pptx-to-letter-pdf.exe .\test-data\test.pptx --overwrite`
   The generated `test-data\test.pdf` is ignored; verify it is valid, every page
-  has the configured dimensions, and it ends with one blank page.
+  has the configured dimensions, writing lines appear to the right of and below
+  slides without overlapping them, and the final page is ruled. `--line-spacing-px`
+  controls rule spacing in CSS pixels.
 
 ## Builds and releases
 

@@ -12,15 +12,36 @@ from __future__ import annotations
 
 import argparse
 import os
+import posixpath
 import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
+import xml.etree.ElementTree as ET
+import zipfile
 from pathlib import Path
 
-from pypdf import PdfReader, PdfWriter, Transformation
+from pypdf import PageObject, PdfReader, PdfWriter, Transformation
+from pypdf.generic import (
+    ContentStream,
+    DictionaryObject,
+    IndirectObject,
+    NameObject,
+)
 
 LIBREOFFICE_TIMEOUT_SECONDS = 300
+PDF_POINTS_PER_PIXEL = 72 / 96
+DEFAULT_RULE_SPACING_PIXELS = 49.0
+NOTE_FONT_SIZE_POINTS = 12
+NOTE_CHARACTER_WIDTH_FACTOR = 0.5
+RULE_LINE_WIDTH_POINTS = 0.5
+RULE_HORIZONTAL_MARGIN_POINTS = 24
+RULE_SLIDE_GUTTER_POINTS = 6
+PRESENTATION_NS = "http://schemas.openxmlformats.org/presentationml/2006/main"
+DRAWING_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+OFFICE_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+PACKAGE_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 
 
 def find_libreoffice(explicit_path: Path | None = None) -> Path:
@@ -146,40 +167,157 @@ def export_with_libreoffice(
         shutil.copy2(exported_pdf, pdf_path)
 
 
+def extract_long_description_notes(pptx_path: Path) -> dict[int, str]:
+    """Return long-description notes keyed by presentation slide number.
+
+    Args:
+        pptx_path: PowerPoint package to inspect.
+
+    Returns:
+        Long-description notes keyed by one-based slide order.
+
+    Notes:
+        Only text in the notes body placeholder is considered. The associated
+        slide is resolved through the package relationships, rather than by
+        assuming the notes and slide filenames have matching numbers.
+    """
+    presentation_part = "ppt/presentation.xml"
+    presentation_relationships_part = "ppt/_rels/presentation.xml.rels"
+    notes_directory = "ppt/notesSlides"
+    relationship_tag = f"{{{PACKAGE_REL_NS}}}Relationship"
+    notes_body_tag = f"{{{PRESENTATION_NS}}}sp"
+    slide_list_tag = f"{{{PRESENTATION_NS}}}sldIdLst"
+    slide_tag = f"{{{PRESENTATION_NS}}}sldId"
+    drawing_paragraph_tag = f"{{{DRAWING_NS}}}p"
+    drawing_text_tag = f"{{{DRAWING_NS}}}t"
+
+    with zipfile.ZipFile(pptx_path) as package:
+        presentation_root = ET.fromstring(package.read(presentation_part))
+        presentation_relationships_root = ET.fromstring(
+            package.read(presentation_relationships_part)
+        )
+        presentation_relationships = {
+            relationship.get("Id"): relationship.get("Target")
+            for relationship in presentation_relationships_root.findall(relationship_tag)
+        }
+        slide_numbers: dict[str, int] = {}
+        slide_list = presentation_root.find(slide_list_tag)
+        if slide_list is None:
+            return {}
+        for slide_number, slide_element in enumerate(slide_list.findall(slide_tag), start=1):
+            relationship_id = slide_element.get(f"{{{OFFICE_REL_NS}}}id")
+            target = presentation_relationships.get(relationship_id)
+            if target is not None:
+                slide_part = _resolve_package_target(presentation_part, target)
+                slide_numbers[slide_part] = slide_number
+
+        notes: dict[int, str] = {}
+        for notes_part in package.namelist():
+            notes_filename = posixpath.basename(notes_part)
+            if (
+                posixpath.dirname(notes_part) != notes_directory
+                or not notes_filename.startswith("notesSlide")
+                or not notes_filename.endswith(".xml")
+            ):
+                continue
+
+            notes_relationships_part = posixpath.join(
+                notes_directory,
+                "_rels",
+                f"{notes_filename}.rels",
+            )
+            if notes_relationships_part not in package.namelist():
+                continue
+            notes_relationships_root = ET.fromstring(
+                package.read(notes_relationships_part)
+            )
+            for relationship in notes_relationships_root.findall(relationship_tag):
+                relationship_type = relationship.get("Type", "")
+                target = relationship.get("Target")
+                if not relationship_type.endswith("/slide") or target is None:
+                    continue
+                slide_number = slide_numbers.get(
+                    _resolve_package_target(notes_part, target)
+                )
+                if slide_number is None:
+                    continue
+
+                notes_root = ET.fromstring(package.read(notes_part))
+                paragraphs: list[str] = []
+                for shape in notes_root.findall(f".//{notes_body_tag}"):
+                    placeholder = shape.find(
+                        f"./{{{PRESENTATION_NS}}}nvSpPr/"
+                        f"{{{PRESENTATION_NS}}}nvPr/"
+                        f"{{{PRESENTATION_NS}}}ph"
+                    )
+                    if placeholder is None or placeholder.get("type") != "body":
+                        continue
+                    paragraphs.extend(
+                        "".join(text.text or "" for text in paragraph.findall(f".//{drawing_text_tag}"))
+                        for paragraph in shape.findall(f".//{drawing_paragraph_tag}")
+                    )
+                note_text = "\n".join(paragraphs).strip()
+                if note_text.casefold().startswith("long description:"):
+                    notes[slide_number] = note_text
+                break
+
+    return notes
+
+
+def _resolve_package_target(source_part: str, target: str) -> str:
+    """Resolve a package relationship target to a normalized package path."""
+    target_path = target.lstrip("/")
+    return posixpath.normpath(
+        target_path
+        if target.startswith("/")
+        else posixpath.join(posixpath.dirname(source_part), target_path)
+    )
+
+
 def fit_to_pages(
     source_path: Path,
     output_path: Path,
     page_width: float,
     page_height: float,
     max_vertical_ratio: float,
+    line_spacing_px: float = DEFAULT_RULE_SPACING_PIXELS,
+    slide_notes: dict[int, str] | None = None,
 ) -> None:
-    """Fit source pages to custom pages and append one empty page.
+    """Fit source pages, add ruled writing space, and append a ruled page.
 
     Args:
         source_path: PDF to read. Page dimensions are interpreted in points.
         output_path: Destination PDF path. An existing file is overwritten. The
-            output always ends with one additional empty page.
+            output always ends with one additional ruled page.
         page_width: Output page width in inches.
         page_height: Output page height in inches.
         max_vertical_ratio: Maximum fraction of output page height occupied by
             slide content; must be greater than 0 and at most 1.
+        line_spacing_px: Distance between writing lines in CSS pixels at 96 DPI.
+        slide_notes: Optional long-description notes keyed by one-based slide
+            number. A lined page is inserted after each slide with a note.
 
     Raises:
         ValueError: If page dimensions or the vertical ratio are invalid, or a
-            source page has invalid dimensions.
+            source page has invalid dimensions or line spacing is less than
+            one pixel. A note that exceeds one lined page or contains
+            unsupported characters also raises ``ValueError``.
         OSError: If the source cannot be read or destination cannot be written.
     """
     if page_width <= 0 or page_height <= 0:
         raise ValueError("Page width and height must be greater than zero.")
     if not 0 < max_vertical_ratio <= 1:
         raise ValueError("Maximum vertical ratio must be greater than 0 and at most 1.")
+    if line_spacing_px < 1:
+        raise ValueError("Line spacing must be at least 1 pixel.")
 
+    line_spacing_points = line_spacing_px * PDF_POINTS_PER_PIXEL
     page_width_points = page_width * 72
     page_height_points = page_height * 72
     max_slide_height = page_height_points * max_vertical_ratio
     reader = PdfReader(str(source_path))
     writer = PdfWriter()
-    for slide in reader.pages:
+    for slide_number, slide in enumerate(reader.pages, start=1):
         # Use the visible page bounds. pypdf reports coordinates in points.
         box = slide.cropbox
         width = float(box.width)
@@ -200,11 +338,202 @@ def fit_to_pages(
             over=True,
             expand=False,
         )
+        _add_rule_lines(
+            page,
+            writer,
+            page_width_points,
+            page_height_points,
+            (
+                -float(box.left) * scale,
+                page_height_points - scaled_height,
+                -float(box.left) * scale + width * scale,
+                page_height_points,
+            ),
+            line_spacing_points,
+        )
+        note_text = (slide_notes or {}).get(slide_number)
+        if note_text is not None:
+            _add_note_page(
+                writer,
+                note_text,
+                page_width_points,
+                page_height_points,
+                line_spacing_points,
+            )
 
-    writer.add_blank_page(width=page_width_points, height=page_height_points)
+    blank_page = writer.add_blank_page(
+        width=page_width_points,
+        height=page_height_points,
+    )
+    _add_rule_lines(
+        blank_page,
+        writer,
+        page_width_points,
+        page_height_points,
+        None,
+        line_spacing_points,
+    )
 
     with output_path.open("wb") as f:
         writer.write(f)
+
+
+def _add_note_page(
+    writer: PdfWriter,
+    note_text: str,
+    page_width_points: float,
+    page_height_points: float,
+    line_spacing_points: float,
+) -> None:
+    """Append a ruled page containing a note in black 12-point sans-serif."""
+    page = writer.add_blank_page(
+        width=page_width_points,
+        height=page_height_points,
+    )
+    _add_rule_lines(
+        page,
+        writer,
+        page_width_points,
+        page_height_points,
+        None,
+        line_spacing_points,
+    )
+
+    available_width = (
+        page_width_points - 2 * RULE_HORIZONTAL_MARGIN_POINTS
+    )
+    wrap_width = max(
+        1,
+        int(available_width / (NOTE_FONT_SIZE_POINTS * NOTE_CHARACTER_WIDTH_FACTOR)),
+    )
+    lines = [
+        line
+        for paragraph in note_text.splitlines()
+        for line in (textwrap.wrap(paragraph, width=wrap_width) or [""])
+    ]
+    rule_positions: list[float] = []
+    y = page_height_points - line_spacing_points
+    while y >= line_spacing_points:
+        rule_positions.append(y)
+        y -= line_spacing_points
+    if len(lines) > len(rule_positions):
+        raise ValueError(
+            f"Long-description note needs {len(lines)} writing lines, but the "
+            f"page has room for {len(rule_positions)}."
+        )
+
+    resources = page.get("/Resources")
+    if isinstance(resources, IndirectObject):
+        resources = resources.get_object()
+    if resources is None:
+        resources = DictionaryObject()
+        page[NameObject("/Resources")] = resources
+    font_resources = resources.get("/Font")
+    if isinstance(font_resources, IndirectObject):
+        font_resources = font_resources.get_object()
+    if font_resources is None:
+        font_resources = DictionaryObject()
+        resources[NameObject("/Font")] = font_resources
+    font_resources[NameObject("/Fnote")] = DictionaryObject(
+        {
+            NameObject("/Type"): NameObject("/Font"),
+            NameObject("/Subtype"): NameObject("/Type1"),
+            NameObject("/BaseFont"): NameObject("/Helvetica"),
+            NameObject("/Encoding"): NameObject("/WinAnsiEncoding"),
+        }
+    )
+
+    commands = []
+    for line, rule_y in zip(lines, rule_positions):
+        try:
+            encoded_line = line.encode("cp1252")
+        except UnicodeEncodeError as exc:
+            raise ValueError(
+                "Long-description note contains characters not supported by "
+                "the standard PDF font."
+            ) from exc
+        escaped_line = (
+            encoded_line.replace(b"\\", b"\\\\")
+            .replace(b"(", b"\\(")
+            .replace(b")", b"\\)")
+        )
+        baseline_y = rule_y + 2
+        commands.append(
+            b"BT /Fnote "
+            + str(NOTE_FONT_SIZE_POINTS).encode("ascii")
+            + b" Tf 1 0 0 1 "
+            + str(RULE_HORIZONTAL_MARGIN_POINTS).encode("ascii")
+            + b" "
+            + str(baseline_y).encode("ascii")
+            + b" Tm ("
+            + escaped_line
+            + b") Tj ET\n"
+        )
+
+    existing = page.get_contents()
+    content = existing.get_data() if existing is not None else b""
+    stream = ContentStream(None, writer)
+    stream.set_data(content + b"".join(commands))
+    page.replace_contents(stream)
+
+
+def _add_rule_lines(
+    page: PageObject,
+    writer: PdfWriter,
+    page_width_points: float,
+    page_height_points: float,
+    slide_bounds: tuple[float, float, float, float] | None,
+    line_spacing_points: float,
+) -> None:
+    """Draw rules outside the slide bounds, or across a blank page."""
+    if line_spacing_points <= 0:
+        raise ValueError("Line spacing must be greater than zero.")
+
+    half_line_width = RULE_LINE_WIDTH_POINTS / 2
+    segments: list[tuple[float, float, float]] = []
+    y = page_height_points - line_spacing_points
+    while y >= line_spacing_points:
+        if slide_bounds is None:
+            segments.append(
+                (RULE_HORIZONTAL_MARGIN_POINTS, page_width_points - RULE_HORIZONTAL_MARGIN_POINTS, y)
+            )
+        else:
+            _, slide_bottom, slide_right, slide_top = slide_bounds
+            overlaps_slide_height = (
+                y + half_line_width > slide_bottom
+                and y - half_line_width < slide_top
+            )
+            if overlaps_slide_height:
+                line_start = slide_right + RULE_SLIDE_GUTTER_POINTS
+                line_end = page_width_points - RULE_HORIZONTAL_MARGIN_POINTS
+                if line_start < line_end:
+                    segments.append((line_start, line_end, y))
+            elif y + half_line_width < slide_bottom:
+                segments.append(
+                    (
+                        RULE_HORIZONTAL_MARGIN_POINTS,
+                        page_width_points - RULE_HORIZONTAL_MARGIN_POINTS,
+                        y,
+                    )
+                )
+        y -= line_spacing_points
+
+    if not segments:
+        return
+
+    existing = page.get_contents()
+    content = existing.get_data() if existing is not None else b""
+    commands = [
+        "\nq\n0.72 0.78 0.84 RG\n",
+        f"{RULE_LINE_WIDTH_POINTS} w\n",
+    ]
+    for line_start, line_end, line_y in segments:
+        commands.append(f"{line_start} {line_y} m\n{line_end} {line_y} l\n")
+    commands.append("S\nQ\n")
+
+    stream = ContentStream(None, writer)
+    stream.set_data(content + "".join(commands).encode("ascii"))
+    page.replace_contents(stream)
 
 
 def main() -> None:
@@ -244,6 +573,16 @@ def main() -> None:
         help="Maximum fraction of page height that a slide may occupy (0 to 1)",
     )
     parser.add_argument(
+        "--line-spacing-px",
+        type=float,
+        default=DEFAULT_RULE_SPACING_PIXELS,
+        metavar="PIXELS",
+        help=(
+            "Spacing between horizontal writing lines in CSS pixels "
+            "at 96 DPI (minimum 1)"
+        ),
+    )
+    parser.add_argument(
         "--recurse",
         action="store_true",
         help="When input is a folder, search its subfolders for .pptx files",
@@ -266,6 +605,8 @@ def main() -> None:
         parser.error("--page-width and --page-height must be greater than zero.")
     if not 0 < args.max_vertical_ratio <= 1:
         parser.error("--max-vertical-ratio must be greater than 0 and at most 1.")
+    if args.line_spacing_px < 1:
+        parser.error("--line-spacing-px must be at least 1.")
     if not input_path.exists():
         parser.error(f"Input path does not exist: {input_path}")
     if input_path.is_file():
@@ -296,6 +637,7 @@ def main() -> None:
                     f"Output already exists: {output_path} "
                     "(pass --overwrite to replace it)"
                 )
+            slide_notes = extract_long_description_notes(pptx_path)
             with tempfile.TemporaryDirectory(prefix="pptx_pdf_") as temp_dir:
                 intermediate = Path(temp_dir) / "libreoffice_export.pdf"
                 export_with_libreoffice(pptx_path, intermediate, libreoffice_path)
@@ -305,6 +647,8 @@ def main() -> None:
                     args.page_width,
                     args.page_height,
                     args.max_vertical_ratio,
+                    args.line_spacing_px,
+                    slide_notes,
                 )
             print(f"Created {output_path}")
         except Exception as exc:

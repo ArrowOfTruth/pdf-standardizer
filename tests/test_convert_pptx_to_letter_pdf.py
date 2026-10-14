@@ -8,13 +8,90 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
-from pypdf import PdfReader, PdfWriter
+from pypdf import PageObject, PdfReader, PdfWriter
 from pypdf.generic import ContentStream
 
 import convert_pptx_to_letter_pdf as converter
+
+
+class PowerPointNotesTests(unittest.TestCase):
+    """Tests for extracting PowerPoint long-description notes."""
+
+    def test_extracts_long_description_by_presentation_slide_order(self) -> None:
+        """Resolve notes to presentation order instead of slide filenames."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            pptx_path = Path(temp_dir) / "presentation.pptx"
+            with zipfile.ZipFile(pptx_path, "w") as package:
+                package.writestr(
+                    "ppt/presentation.xml",
+                    """<p:presentation
+                        xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                        xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+                      <p:sldIdLst>
+                        <p:sldId id="1" r:id="rId1"/>
+                        <p:sldId id="2" r:id="rId2"/>
+                      </p:sldIdLst>
+                    </p:presentation>""",
+                )
+                package.writestr(
+                    "ppt/_rels/presentation.xml.rels",
+                    """<Relationships
+                        xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+                      <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide2.xml"/>
+                      <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide6.xml"/>
+                    </Relationships>""",
+                )
+                package.writestr(
+                    "ppt/notesSlides/notesSlide1.xml",
+                    """<p:notes
+                        xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                        xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                      <p:cSld><p:spTree>
+                        <p:sp>
+                          <p:nvSpPr><p:nvPr><p:ph type="body"/></p:nvPr></p:nvSpPr>
+                          <p:txBody><a:p><a:r><a:t>Long Description:</a:t></a:r></a:p>
+                            <a:p><a:r><a:t>A side view of the brain.</a:t></a:r></a:p>
+                          </p:txBody>
+                        </p:sp>
+                      </p:spTree></p:cSld>
+                    </p:notes>""",
+                )
+                package.writestr(
+                    "ppt/notesSlides/_rels/notesSlide1.xml.rels",
+                    """<Relationships
+                        xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+                      <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="../slides/slide6.xml"/>
+                    </Relationships>""",
+                )
+                package.writestr(
+                    "ppt/notesSlides/notesSlide2.xml",
+                    """<p:notes
+                        xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                        xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                      <p:cSld><p:spTree>
+                        <p:sp>
+                          <p:nvSpPr><p:nvPr><p:ph type="body"/></p:nvPr></p:nvSpPr>
+                          <p:txBody><a:p><a:r><a:t>Ordinary note</a:t></a:r></a:p></p:txBody>
+                        </p:sp>
+                      </p:spTree></p:cSld>
+                    </p:notes>""",
+                )
+                package.writestr(
+                    "ppt/notesSlides/_rels/notesSlide2.xml.rels",
+                    """<Relationships
+                        xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+                      <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="../slides/slide2.xml"/>
+                    </Relationships>""",
+                )
+
+            self.assertEqual(
+                converter.extract_long_description_notes(pptx_path),
+                {2: "Long Description:\nA side view of the brain."},
+            )
 
 
 class LibreOfficeExportTests(unittest.TestCase):
@@ -106,8 +183,35 @@ class LibreOfficeExportTests(unittest.TestCase):
 class FitToPagesTests(unittest.TestCase):
     """Tests for PDF page sizing and slide transformations."""
 
+    def get_horizontal_rule_positions(
+        self,
+        page: PageObject,
+        reader: PdfReader,
+    ) -> list[tuple[float, float, float]]:
+        """Return each horizontal rule's x start, x end, and y position."""
+        operations = ContentStream(page.get_contents(), reader).operations
+        rules = []
+        for index, (operands, operator) in enumerate(operations):
+            if operator != b"m":
+                continue
+            self.assertEqual(operations[index + 1][1], b"l")
+            line_operands = operations[index + 1][0]
+            self.assertEqual(float(operands[1]), float(line_operands[1]))
+            rules.append(
+                (
+                    float(operands[0]),
+                    float(line_operands[0]),
+                    float(operands[1]),
+                )
+            )
+        return rules
+
+    def test_default_line_spacing_is_49_pixels(self) -> None:
+        """Use the requested default spacing between writing lines."""
+        self.assertEqual(converter.DEFAULT_RULE_SPACING_PIXELS, 49.0)
+
     def test_adds_empty_page_when_source_has_no_pages(self) -> None:
-        """Produce the configured blank page even for an empty source PDF."""
+        """Produce a ruled page even for an empty source PDF."""
         with tempfile.TemporaryDirectory() as temp_dir:
             source_path = Path(temp_dir) / "source.pdf"
             output_path = Path(temp_dir) / "output.pdf"
@@ -120,7 +224,15 @@ class FitToPagesTests(unittest.TestCase):
             self.assertEqual(len(reader.pages), 1)
             self.assertEqual(float(reader.pages[0].mediabox.width), 288)
             self.assertEqual(float(reader.pages[0].mediabox.height), 216)
-            self.assertIsNone(reader.pages[0].get_contents())
+            self.assertEqual(
+                self.get_horizontal_rule_positions(reader.pages[0], reader),
+                [
+                    (24, 264, 179.25),
+                    (24, 264, 142.5),
+                    (24, 264, 105.75),
+                    (24, 264, 69.0),
+                ],
+            )
 
     def test_fits_pages_and_appends_empty_page(self) -> None:
         """Fit source pages and append one empty page with matching dimensions."""
@@ -143,7 +255,51 @@ class FitToPagesTests(unittest.TestCase):
             for page in reader.pages:
                 self.assertEqual(float(page.mediabox.width), 288)
                 self.assertEqual(float(page.mediabox.height), 216)
-            self.assertIsNone(reader.pages[-1].get_contents())
+            self.assertEqual(
+                self.get_horizontal_rule_positions(
+                    reader.pages[0], reader
+                ),
+                [
+                    (222, 264, 179.25),
+                    (222, 264, 142.5),
+                    (24, 264, 105.75),
+                    (24, 264, 69.0),
+                ],
+            )
+            self.assertEqual(
+                self.get_horizontal_rule_positions(
+                    reader.pages[1], reader
+                ),
+                [
+                    (150, 264, 179.25),
+                    (24, 264, 142.5),
+                    (24, 264, 105.75),
+                    (24, 264, 69.0),
+                ],
+            )
+            blank_page_rules = self.get_horizontal_rule_positions(
+                reader.pages[-1], reader
+            )
+            self.assertEqual(
+                [y for _, _, y in blank_page_rules],
+                [179.25, 142.5, 105.75, 69.0],
+            )
+            self.assertTrue(
+                all(
+                    x_start >= 222 or y + 0.25 < 108
+                    for x_start, _, y in self.get_horizontal_rule_positions(
+                        reader.pages[0], reader
+                    )
+                )
+            )
+            self.assertTrue(
+                all(
+                    x_start >= 150 or y + 0.25 < 144
+                    for x_start, _, y in self.get_horizontal_rule_positions(
+                        reader.pages[1], reader
+                    )
+                )
+            )
 
             matrices = []
             for page in reader.pages[:-1]:
@@ -159,6 +315,62 @@ class FitToPagesTests(unittest.TestCase):
                     (0.75, 0, 0, 0.75, 0, 108),
                     (1, 0, 0, 1, 0, 144),
                 ],
+            )
+
+    def test_uses_custom_line_spacing_in_pixels(self) -> None:
+        """Convert CSS pixel spacing to PDF points."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_path = Path(temp_dir) / "source.pdf"
+            output_path = Path(temp_dir) / "output.pdf"
+            with source_path.open("wb") as source_file:
+                PdfWriter().write(source_file)
+
+            converter.fit_to_pages(
+                source_path,
+                output_path,
+                4,
+                3,
+                0.5,
+                line_spacing_px=48,
+            )
+
+            reader = PdfReader(str(output_path))
+            self.assertEqual(
+                [y for _, _, y in self.get_horizontal_rule_positions(
+                    reader.pages[0], reader
+                )],
+                [180, 144, 108, 72, 36],
+            )
+
+    def test_inserts_ruled_note_page_after_matching_slide(self) -> None:
+        """Write long-description text on a ruled page after its slide."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_path = Path(temp_dir) / "source.pdf"
+            output_path = Path(temp_dir) / "output.pdf"
+            writer = PdfWriter()
+            writer.add_blank_page(width=288, height=144)
+            writer.add_blank_page(width=288, height=144)
+            with source_path.open("wb") as source_file:
+                writer.write(source_file)
+
+            converter.fit_to_pages(
+                source_path,
+                output_path,
+                4,
+                3,
+                0.5,
+                slide_notes={2: "Long Description: A side view of the brain."},
+            )
+
+            reader = PdfReader(str(output_path))
+            self.assertEqual(len(reader.pages), 4)
+            self.assertEqual(
+                " ".join(reader.pages[2].extract_text().split()),
+                "Long Description: A side view of the brain.",
+            )
+            self.assertEqual(
+                len(self.get_horizontal_rule_positions(reader.pages[2], reader)),
+                4,
             )
 
     def test_rejects_invalid_page_configuration(self) -> None:
@@ -177,6 +389,15 @@ class FitToPagesTests(unittest.TestCase):
                         converter.fit_to_pages(
                             source_path, output_path, width, height, ratio
                         )
+            with self.assertRaisesRegex(ValueError, "at least 1 pixel"):
+                converter.fit_to_pages(
+                    source_path,
+                    output_path,
+                    4,
+                    3,
+                    0.5,
+                    line_spacing_px=0.5,
+                )
 
 
 class OutputHandlingTests(unittest.TestCase):
@@ -233,6 +454,7 @@ class OutputHandlingTests(unittest.TestCase):
                     "find_libreoffice",
                     return_value=Path("soffice.com"),
                 ),
+                patch.object(converter, "extract_long_description_notes", return_value={}),
                 contextlib.redirect_stdout(io.StringIO()),
             ):
                 converter.main()

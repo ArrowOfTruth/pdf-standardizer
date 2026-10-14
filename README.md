@@ -22,8 +22,25 @@ Microsoft PowerPoint, especially when presentations rely on fonts or features
 that LibreOffice does not support. The bundled LibreOffice distribution is
 unmodified and its license notices are included in the ZIP.
 
-Each output PDF ends with one additional empty page using the same page size as
-the converted slides.
+Light gray horizontal writing lines are spaced 49 CSS pixels apart by
+default. On slide pages, lines appear in the unused area to the right of and
+below the slide; they do not cross the slide's page bounds. The PDF ends with
+one additional fully ruled page using the same page size.
+
+When a slide's speaker notes start with `Long Description:`, a lined page is
+inserted immediately after that slide with the note text in black 12-point
+sans-serif type. The note page uses the same rule spacing as the rest of the
+PDF.
+
+Use `--line-spacing-px` to set the spacing in CSS pixels (96 DPI; 1 pixel =
+0.75 PDF points). For example:
+
+```powershell
+.\pptx-to-letter-pdf.exe presentation.pptx --overwrite --line-spacing-px 48
+```
+
+The default is 49 pixels (36.75 PDF points); values below 1 pixel are
+rejected.
 
 Existing PDF outputs are preserved by default. Pass `--overwrite` to replace
 them. For example:
@@ -78,12 +95,12 @@ The tracked sample presentation is `test-data\test.pptx`. Convert it with the
 local executable:
 
 ```powershell
-.\dist\pptx-to-letter-pdf.exe .\test-data\test.pptx --overwrite
+.\dist\pptx-to-letter-pdf.exe .\test-data\test.pptx --overwrite --line-spacing-px 48
 ```
 
 This writes `test-data\test.pdf`. The generated PDF is ignored by Git. Check
 that the PDF opens, its pages have the configured output dimensions, and it
-ends with one empty page matching the other pages' size. The GitHub Actions
+ends with one ruled page matching the other pages' size. The GitHub Actions
 workflow currently checks that this conversion produces a non-empty PDF.
 
 To use a separately installed LibreOffice without embedding it, pass the path
