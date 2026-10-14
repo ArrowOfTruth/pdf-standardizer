@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/ArrowOfTruth/pdf-standardizer/compare/pdf-standardizer-v0.2.0...pdf-standardizer-v0.3.0) (2026-10-14)
+
+
+### Features
+
+* package should be exe not zip ([b6ec516](https://github.com/ArrowOfTruth/pdf-standardizer/commit/b6ec516c95b3b96182ca18ebd5a3029071f4b27d))
+
 ## [0.2.0](https://github.com/ArrowOfTruth/pdf-standardizer/compare/pdf-standardizer-v0.1.0...pdf-standardizer-v0.2.0) (2026-10-14)
 
 
