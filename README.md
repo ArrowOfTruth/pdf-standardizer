@@ -1,14 +1,15 @@
 # pdf-standardizer
 
-## Download the Windows package
+## Download the Windows executable
 
-The release ZIP contains the converter executable with Python, `pypdf`, and the
-LibreOffice runtime embedded. It does not require Microsoft PowerPoint or a
-separate LibreOffice installation.
+The release executable bundles Python, `pypdf`, and the LibreOffice runtime. It
+does not require Microsoft PowerPoint or a separate LibreOffice installation.
 
-Download `pdf-standardizer-windows-x64.zip` from the
+Download `pptx-to-letter-pdf.exe` from the
 [latest GitHub Release](https://github.com/ArrowOfTruth/pdf-standardizer/releases/latest).
-After extracting, run from PowerShell or Command Prompt:
+Also download `THIRD-PARTY-NOTICES.txt` from the same release to retain the
+bundled LibreOffice license notices. Run the executable from PowerShell or
+Command Prompt:
 
 ```powershell
 .\pptx-to-letter-pdf.exe presentation.pptx
@@ -20,7 +21,7 @@ temporary disk space. The executable is large (about 643 MB in the current
 build). LibreOffice renders the slides; output appearance can differ from
 Microsoft PowerPoint, especially when presentations rely on fonts or features
 that LibreOffice does not support. The bundled LibreOffice distribution is
-unmodified and its license notices are included in the ZIP.
+unmodified.
 
 Light gray horizontal writing lines are spaced 49 CSS pixels apart by
 default. On slide pages, lines appear in the unused area to the right of and
@@ -50,14 +51,16 @@ them. For example:
 ```
 
 Every push to `main` runs unit tests and builds the Windows x64 executable.
-Normal commits upload `pdf-standardizer-windows-x64.zip` as a GitHub Actions
-artifact, available for 14 days. When a release PR is merged, the same build
-run attaches the ZIP to the new GitHub Release.
+Normal commits upload `pptx-to-letter-pdf.exe` as a GitHub Actions artifact,
+available for 14 days. GitHub downloads workflow artifacts as ZIP archives;
+this artifact contains the executable directly, without a project-created
+package ZIP. When a release PR is merged, the same build run attaches the raw
+executable and `THIRD-PARTY-NOTICES.txt` to the new GitHub Release.
 
 Releases use Semantic Versioning and Conventional Commits. Release Please
 opens or updates a release PR with the version bump and changelog. Merge that
-PR to create the version tag and GitHub Release; that run builds the executable
-and uploads the ZIP to the release. The initial version is `0.1.0`.
+PR to create the version tag and GitHub Release; that run builds and uploads the
+executable. The initial version is `0.1.0`.
 
 For Release Please to open its PR, enable **Settings → Actions → General →
 Workflow permissions → Allow GitHub Actions to create and approve pull
