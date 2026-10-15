@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0](https://github.com/ArrowOfTruth/pdf-standardizer/compare/pdf-standardizer-v0.5.0...pdf-standardizer-v0.6.0) (2026-10-15)
+
+
+### Features
+
+* better image specification ([946d9fe](https://github.com/ArrowOfTruth/pdf-standardizer/commit/946d9fe777c211c533084fb99f6b938edc6009af))
+* version unpinning, local build improvements ([808103b](https://github.com/ArrowOfTruth/pdf-standardizer/commit/808103b33736c0bbbacefb58dba0bd5808e3c3c1))
+
 ## [0.5.0](https://github.com/ArrowOfTruth/pdf-standardizer/compare/pdf-standardizer-v0.4.0...pdf-standardizer-v0.5.0) (2026-10-15)
 
 
