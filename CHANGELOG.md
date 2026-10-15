@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/ArrowOfTruth/pdf-standardizer/compare/pdf-standardizer-v0.3.0...pdf-standardizer-v0.4.0) (2026-10-15)
+
+
+### Features
+
+* solution for long descriptions ([7ae27fb](https://github.com/ArrowOfTruth/pdf-standardizer/commit/7ae27fb32acf674a4322fd795eb03f0c80e0eeca))
+
 ## [0.3.0](https://github.com/ArrowOfTruth/pdf-standardizer/compare/pdf-standardizer-v0.2.0...pdf-standardizer-v0.3.0) (2026-10-14)
 
 
