@@ -1,5 +1,5 @@
-FROM python:3.12-windowsservercore-ltsc2022
+FROM python:windowsservercore-ltsc2025
 
-WORKDIR C:\workspace
+WORKDIR C:\\workspace
 
 ENTRYPOINT ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "C:\\workspace\\build-locally\\build-in-container.ps1"]
