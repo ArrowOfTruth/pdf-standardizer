@@ -90,12 +90,15 @@ containers. From the repository root, run:
 .\build-locally\build.ps1
 ```
 
-The script builds a Windows container with Python 3.12, then runs the same
-dependency installation, unit tests, LibreOffice MSI checksum verification and
-extraction, PyInstaller build, executable help check, and sample conversion
-check used by GitHub Actions. Docker writes the build outputs back to the
-working tree; the executable is `dist\pptx-to-letter-pdf.exe`. The first run
-downloads the Python container image and LibreOffice MSI.
+The local Windows container and GitHub Actions use the latest stable Python
+release rather than pinning to a specific minor version. The build installs the
+latest pypdf and PyInstaller releases, and selects the latest stable LibreOffice
+release from The Document Foundation's download index, verifying its published
+MSI checksum before extraction. It then runs the unit tests, builds the
+executable, checks its help output, and runs the sample conversion check. Docker
+writes build outputs back to the working tree; the executable is
+`dist\pptx-to-letter-pdf.exe`. The first run downloads the Python container
+image and LibreOffice MSI.
 
 ### Test with the sample presentation
 

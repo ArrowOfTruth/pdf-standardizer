@@ -13,46 +13,9 @@ if ($LASTEXITCODE -ne 0) {
     throw 'Unit tests failed.'
 }
 
-$version = '26.8.1'
-$filename = "LibreOffice_${version}_Win_x86-64.msi"
-$baseUrl = "https://download.documentfoundation.org/libreoffice/stable/$version/win/x86_64"
-$msiPath = Join-Path $env:TEMP $filename
-Invoke-WebRequest "$baseUrl/$filename" -OutFile $msiPath -UseBasicParsing
-$expectedHash = 'c6298b10cfa1748bcbedad94c62ce771e240e5021bfd6d7a967cd571b04b5312'
-$actualHash = (Get-FileHash $msiPath -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($actualHash -ne $expectedHash) {
-    throw 'LibreOffice MSI SHA-256 verification failed.'
-}
-
-$stagePath = Join-Path $env:TEMP 'libreoffice-admin-image'
-if (Test-Path -LiteralPath $stagePath) {
-    Remove-Item -LiteralPath $stagePath -Recurse -Force
-}
-New-Item -ItemType Directory -Path $stagePath | Out-Null
-$process = Start-Process msiexec.exe `
-    -ArgumentList "/a `"$msiPath`" /qn TARGETDIR=`"$stagePath`"" `
-    -Wait -PassThru
-if ($process.ExitCode -ne 0) {
-    throw "LibreOffice administrative extraction failed with exit code $($process.ExitCode)."
-}
-$soffice = Get-ChildItem $stagePath -Filter soffice.com -Recurse -File |
-    Select-Object -First 1
-if ($null -eq $soffice) {
-    throw 'LibreOffice extraction did not contain soffice.com.'
-}
-$installRoot = $soffice.Directory.Parent
-$destination = Join-Path (Get-Location) 'dist\LibreOffice'
-New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destination) | Out-Null
-if (Test-Path -LiteralPath $destination) {
-    Remove-Item -LiteralPath $destination -Recurse -Force
-}
-Move-Item -LiteralPath $installRoot.FullName -Destination $destination
-if (-not (Test-Path -LiteralPath (Join-Path $destination 'program\soffice.com') -PathType Leaf)) {
-    throw 'LibreOffice runtime was not placed at the expected destination.'
-}
-& (Join-Path $destination 'program\soffice.com') --headless --version
+& (Join-Path $PSScriptRoot 'prepare-libreoffice.ps1')
 if ($LASTEXITCODE -ne 0) {
-    throw 'The bundled LibreOffice runtime failed its version check.'
+    throw 'Failed to download, verify, and extract LibreOffice.'
 }
 
 pyinstaller --noconfirm --clean --onefile `

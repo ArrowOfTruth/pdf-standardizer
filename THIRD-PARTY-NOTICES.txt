@@ -1,6 +1,6 @@
-The Windows release ZIP includes unmodified LibreOffice 26.8.1 binaries.
-The official MSI used to assemble this runtime has SHA-256
-c6298b10cfa1748bcbedad94c62ce771e240e5021bfd6d7a967cd571b04b5312.
+The Windows release ZIP includes unmodified binaries from the latest stable
+LibreOffice release available at build time. The build verifies the MSI against
+the SHA-256 checksum published by The Document Foundation.
 
 LibreOffice is free and open-source software distributed under the Mozilla
 Public License 2.0 and other licenses. The original license and copyright
