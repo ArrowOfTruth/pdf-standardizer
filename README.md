@@ -30,8 +30,9 @@ one additional fully ruled page using the same page size.
 
 When a slide's speaker notes start with `Long Description:`, a lined page is
 inserted immediately after that slide with the note text in black 12-point
-sans-serif type. The note page uses the same rule spacing as the rest of the
-PDF.
+sans-serif type. If the note needs more lines than fit on one page, additional
+lined pages are inserted consecutively until the note is complete. Note pages
+use the same rule spacing as the rest of the PDF.
 
 Use `--line-spacing-px` to set the spacing in CSS pixels (96 DPI; 1 pixel =
 0.75 PDF points). For example:

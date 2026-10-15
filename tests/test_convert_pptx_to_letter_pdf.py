@@ -373,6 +373,45 @@ class FitToPagesTests(unittest.TestCase):
                 4,
             )
 
+    def test_continues_long_description_across_ruled_pages(self) -> None:
+        """Continue notes onto additional ruled pages when one page is full."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_path = Path(temp_dir) / "source.pdf"
+            output_path = Path(temp_dir) / "output.pdf"
+            with source_path.open("wb") as source_file:
+                writer = PdfWriter()
+                writer.add_blank_page(width=612, height=792)
+                writer.write(source_file)
+
+            note_lines = [f"Description line {number}" for number in range(1, 20)]
+            converter.fit_to_pages(
+                source_path,
+                output_path,
+                8.5,
+                10,
+                0.5,
+                slide_notes={1: "\n".join(note_lines)},
+            )
+
+            reader = PdfReader(str(output_path))
+            self.assertEqual(len(reader.pages), 4)
+            self.assertEqual(
+                " ".join(reader.pages[1].extract_text().split()),
+                " ".join(note_lines[:18]),
+            )
+            self.assertEqual(
+                " ".join(reader.pages[2].extract_text().split()),
+                note_lines[18],
+            )
+            self.assertEqual(
+                len(self.get_horizontal_rule_positions(reader.pages[1], reader)),
+                18,
+            )
+            self.assertEqual(
+                len(self.get_horizontal_rule_positions(reader.pages[2], reader)),
+                18,
+            )
+
     def test_rejects_invalid_page_configuration(self) -> None:
         """Reject invalid dimensions and content-height limits."""
         with tempfile.TemporaryDirectory() as temp_dir:

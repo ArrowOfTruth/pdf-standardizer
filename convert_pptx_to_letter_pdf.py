@@ -300,8 +300,7 @@ def fit_to_pages(
     Raises:
         ValueError: If page dimensions or the vertical ratio are invalid, or a
             source page has invalid dimensions or line spacing is less than
-            one pixel. A note that exceeds one lined page or contains
-            unsupported characters also raises ``ValueError``.
+            one pixel, or a note contains unsupported characters.
         OSError: If the source cannot be read or destination cannot be written.
     """
     if page_width <= 0 or page_height <= 0:
@@ -385,20 +384,7 @@ def _add_note_page(
     page_height_points: float,
     line_spacing_points: float,
 ) -> None:
-    """Append a ruled page containing a note in black 12-point sans-serif."""
-    page = writer.add_blank_page(
-        width=page_width_points,
-        height=page_height_points,
-    )
-    _add_rule_lines(
-        page,
-        writer,
-        page_width_points,
-        page_height_points,
-        None,
-        line_spacing_points,
-    )
-
+    """Append enough ruled pages to fit a note in black 12-point sans-serif."""
     available_width = (
         page_width_points - 2 * RULE_HORIZONTAL_MARGIN_POINTS
     )
@@ -416,65 +402,82 @@ def _add_note_page(
     while y >= line_spacing_points:
         rule_positions.append(y)
         y -= line_spacing_points
-    if len(lines) > len(rule_positions):
+    if lines and not rule_positions:
         raise ValueError(
             f"Long-description note needs {len(lines)} writing lines, but the "
-            f"page has room for {len(rule_positions)}."
+            "page has room for 0."
         )
 
-    resources = page.get("/Resources")
-    if isinstance(resources, IndirectObject):
-        resources = resources.get_object()
-    if resources is None:
-        resources = DictionaryObject()
-        page[NameObject("/Resources")] = resources
-    font_resources = resources.get("/Font")
-    if isinstance(font_resources, IndirectObject):
-        font_resources = font_resources.get_object()
-    if font_resources is None:
-        font_resources = DictionaryObject()
-        resources[NameObject("/Font")] = font_resources
-    font_resources[NameObject("/Fnote")] = DictionaryObject(
-        {
-            NameObject("/Type"): NameObject("/Font"),
-            NameObject("/Subtype"): NameObject("/Type1"),
-            NameObject("/BaseFont"): NameObject("/Helvetica"),
-            NameObject("/Encoding"): NameObject("/WinAnsiEncoding"),
-        }
-    )
-
-    commands = []
-    for line, rule_y in zip(lines, rule_positions):
-        try:
-            encoded_line = line.encode("cp1252")
-        except UnicodeEncodeError as exc:
-            raise ValueError(
-                "Long-description note contains characters not supported by "
-                "the standard PDF font."
-            ) from exc
-        escaped_line = (
-            encoded_line.replace(b"\\", b"\\\\")
-            .replace(b"(", b"\\(")
-            .replace(b")", b"\\)")
+    lines_per_page = max(1, len(rule_positions))
+    for start in range(0, max(1, len(lines)), lines_per_page):
+        page = writer.add_blank_page(
+            width=page_width_points,
+            height=page_height_points,
         )
-        baseline_y = rule_y + 2
-        commands.append(
-            b"BT /Fnote "
-            + str(NOTE_FONT_SIZE_POINTS).encode("ascii")
-            + b" Tf 1 0 0 1 "
-            + str(RULE_HORIZONTAL_MARGIN_POINTS).encode("ascii")
-            + b" "
-            + str(baseline_y).encode("ascii")
-            + b" Tm ("
-            + escaped_line
-            + b") Tj ET\n"
+        _add_rule_lines(
+            page,
+            writer,
+            page_width_points,
+            page_height_points,
+            None,
+            line_spacing_points,
         )
 
-    existing = page.get_contents()
-    content = existing.get_data() if existing is not None else b""
-    stream = ContentStream(None, writer)
-    stream.set_data(content + b"".join(commands))
-    page.replace_contents(stream)
+        resources = page.get("/Resources")
+        if isinstance(resources, IndirectObject):
+            resources = resources.get_object()
+        if resources is None:
+            resources = DictionaryObject()
+            page[NameObject("/Resources")] = resources
+        font_resources = resources.get("/Font")
+        if isinstance(font_resources, IndirectObject):
+            font_resources = font_resources.get_object()
+        if font_resources is None:
+            font_resources = DictionaryObject()
+            resources[NameObject("/Font")] = font_resources
+        font_resources[NameObject("/Fnote")] = DictionaryObject(
+            {
+                NameObject("/Type"): NameObject("/Font"),
+                NameObject("/Subtype"): NameObject("/Type1"),
+                NameObject("/BaseFont"): NameObject("/Helvetica"),
+                NameObject("/Encoding"): NameObject("/WinAnsiEncoding"),
+            }
+        )
+
+        commands = []
+        for line, rule_y in zip(
+            lines[start : start + lines_per_page], rule_positions
+        ):
+            try:
+                encoded_line = line.encode("cp1252")
+            except UnicodeEncodeError as exc:
+                raise ValueError(
+                    "Long-description note contains characters not supported by "
+                    "the standard PDF font."
+                ) from exc
+            escaped_line = (
+                encoded_line.replace(b"\\", b"\\\\")
+                .replace(b"(", b"\\(")
+                .replace(b")", b"\\)")
+            )
+            baseline_y = rule_y + 2
+            commands.append(
+                b"BT /Fnote "
+                + str(NOTE_FONT_SIZE_POINTS).encode("ascii")
+                + b" Tf 1 0 0 1 "
+                + str(RULE_HORIZONTAL_MARGIN_POINTS).encode("ascii")
+                + b" "
+                + str(baseline_y).encode("ascii")
+                + b" Tm ("
+                + escaped_line
+                + b") Tj ET\n"
+            )
+
+        existing = page.get_contents()
+        content = existing.get_data() if existing is not None else b""
+        stream = ContentStream(None, writer)
+        stream.set_data(content + b"".join(commands))
+        page.replace_contents(stream)
 
 
 def _add_rule_lines(
