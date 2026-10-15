@@ -82,16 +82,20 @@ publishing or uploading the build.
 
 ## Build locally
 
-On Windows with Python and LibreOffice installed at the default path:
+Install Docker Desktop on Windows and switch it to **Windows containers**.
+The Windows container engine must be running, and the host must support Windows
+containers. From the repository root, run:
 
 ```powershell
-python -m pip install -r requirements-build.txt
-pyinstaller --noconfirm --clean --onefile --name pptx-to-letter-pdf --add-data "$env:ProgramFiles\LibreOffice;LibreOffice" convert_pptx_to_letter_pdf.py
+.\build-locally\build.ps1
 ```
 
-The executable is written to `dist\pptx-to-letter-pdf.exe` with LibreOffice
-embedded. To embed a non-standard LibreOffice installation, replace the
-`$env:ProgramFiles\LibreOffice` source path with its install directory.
+The script builds a Windows container with Python 3.12, then runs the same
+dependency installation, unit tests, LibreOffice MSI checksum verification and
+extraction, PyInstaller build, executable help check, and sample conversion
+check used by GitHub Actions. Docker writes the build outputs back to the
+working tree; the executable is `dist\pptx-to-letter-pdf.exe`. The first run
+downloads the Python container image and LibreOffice MSI.
 
 ### Test with the sample presentation
 

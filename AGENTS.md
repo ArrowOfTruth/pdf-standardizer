@@ -31,14 +31,12 @@
 
 - The GitHub Actions workflow builds and tests on pushes to `main`. Preserve the
   bundled LibreOffice conversion check using `test-data/test.pptx`.
-- For a local release-like build on Windows, install dependencies with
-  `python -m pip install -r requirements-build.txt`, then follow the workflow's
-  LibreOffice download, SHA-256 verification, and extraction steps to stage the
-  runtime at `dist\LibreOffice`. Build with:
-  `pyinstaller --noconfirm --clean --onefile --name pptx-to-letter-pdf --add-data "dist\LibreOffice;LibreOffice" convert_pptx_to_letter_pdf.py`
-  The executable is written to `dist\pptx-to-letter-pdf.exe`. Run the fixture
-  check above after building. The README also documents a simpler build using
-  an installed LibreOffice runtime.
+- For a local release-like build, require Docker Desktop with Windows
+  containers enabled and run `build-locally\build.ps1` from the repository
+  root. The container mirrors the GitHub workflow's dependency installation,
+  tests, verified LibreOffice extraction, PyInstaller build, and bundled
+  executable checks. The executable is written to
+  `dist\pptx-to-letter-pdf.exe`.
 - Verify the LibreOffice download checksum before extracting or packaging it.
 - Use Conventional Commit prefixes so Release Please can select the SemVer
   bump: `fix:` for patch, `feat:` for minor, and `!` or a `BREAKING CHANGE:`
