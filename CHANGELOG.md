@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.7.0](https://github.com/ArrowOfTruth/pdf-standardizer/compare/pdf-standardizer-v0.6.0...pdf-standardizer-v0.7.0) (2026-10-20)
+
+
+### Features
+
+* improve PDF and PPTX note conversion ([5986816](https://github.com/ArrowOfTruth/pdf-standardizer/commit/598681670ff1b628e1aa2d7faa44df5eee9c8512))
+* keep only the latest build artifact ([83d42dd](https://github.com/ArrowOfTruth/pdf-standardizer/commit/83d42dd70ee105704a116f6c1bdd54c840850cec))
+* pair PDF artwork with PPTX long descriptions ([c3f0a7b](https://github.com/ArrowOfTruth/pdf-standardizer/commit/c3f0a7b09958beb1dc6a51c376fb5f76d9e77c9c))
+* support PDF inputs and update the Windows build workflow ([ea79b6b](https://github.com/ArrowOfTruth/pdf-standardizer/commit/ea79b6b31eb08b6e66bb215aea2be5d822c191c8))
+* update test data with handwriting ink ([f138c38](https://github.com/ArrowOfTruth/pdf-standardizer/commit/f138c3815605ebc095832fcec0ef0d6326c90153))
+
 ## [0.6.0](https://github.com/ArrowOfTruth/pdf-standardizer/compare/pdf-standardizer-v0.5.0...pdf-standardizer-v0.6.0) (2026-10-15)
 
 
