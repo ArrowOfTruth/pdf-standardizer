@@ -372,6 +372,67 @@ class FitToPagesTests(unittest.TestCase):
                 len(self.get_horizontal_rule_positions(reader.pages[2], reader)),
                 4,
             )
+            note_page = reader.pages[2]
+            operations = ContentStream(note_page.get_contents(), reader).operations
+            font_sizes = [
+                float(operands[1])
+                for operands, operator in operations
+                if operator == b"Tf" and str(operands[0]) == "/Fnote"
+            ]
+            self.assertTrue(font_sizes)
+            self.assertTrue(
+                all(size == converter.NOTE_FONT_SIZE_POINTS for size in font_sizes)
+            )
+            rule_y = self.get_horizontal_rule_positions(note_page, reader)[0][2]
+            baselines = [
+                float(operands[5])
+                for operands, operator in operations
+                if operator == b"Tm"
+            ]
+            self.assertEqual(
+                baselines[0],
+                rule_y + converter.NOTE_BASELINE_OFFSET_POINTS,
+            )
+
+    def test_wraps_note_text_to_fit_larger_font(self) -> None:
+        """Wrap note text at the character width for its larger font size."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_path = Path(temp_dir) / "source.pdf"
+            output_path = Path(temp_dir) / "output.pdf"
+            with source_path.open("wb") as source_file:
+                writer = PdfWriter()
+                writer.add_blank_page(width=288, height=144)
+                writer.write(source_file)
+
+            note_text = (
+                "Long Description: one two three four five six seven eight "
+                "nine ten eleven twelve"
+            )
+            converter.fit_to_pages(
+                source_path,
+                output_path,
+                4,
+                3,
+                0.5,
+                slide_notes={1: note_text},
+            )
+
+            reader = PdfReader(str(output_path))
+            operations = ContentStream(reader.pages[1].get_contents(), reader).operations
+            rendered_lines = [
+                str(operands[0])
+                for operands, operator in operations
+                if operator == b"Tj"
+            ]
+            self.assertEqual(
+                rendered_lines,
+                [
+                    "Long Description: one two",
+                    "three four five six seven",
+                    "eight nine ten eleven",
+                    "twelve",
+                ],
+            )
 
     def test_continues_long_description_across_ruled_pages(self) -> None:
         """Continue notes onto additional ruled pages when one page is full."""

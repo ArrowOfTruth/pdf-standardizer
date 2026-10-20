@@ -35,8 +35,9 @@ from pypdf.generic import (
 LIBREOFFICE_TIMEOUT_SECONDS = 300
 PDF_POINTS_PER_PIXEL = 72 / 96
 DEFAULT_RULE_SPACING_PIXELS = 49.0
-NOTE_FONT_SIZE_POINTS = 12
+NOTE_FONT_SIZE_POINTS = 18
 NOTE_CHARACTER_WIDTH_FACTOR = 0.5
+NOTE_BASELINE_OFFSET_POINTS = 5
 RULE_LINE_WIDTH_POINTS = 0.5
 RULE_HORIZONTAL_MARGIN_POINTS = 24
 RULE_SLIDE_GUTTER_POINTS = 6
@@ -399,7 +400,7 @@ def _add_note_page(
     page_height_points: float,
     line_spacing_points: float,
 ) -> None:
-    """Append enough ruled pages to fit a note in black 12-point sans-serif."""
+    """Append enough ruled pages to fit a note in black 18-point sans-serif."""
     available_width = (
         page_width_points - 2 * RULE_HORIZONTAL_MARGIN_POINTS
     )
@@ -475,7 +476,7 @@ def _add_note_page(
                 .replace(b"(", b"\\(")
                 .replace(b")", b"\\)")
             )
-            baseline_y = rule_y + 2
+            baseline_y = rule_y + NOTE_BASELINE_OFFSET_POINTS
             commands.append(
                 b"BT /Fnote "
                 + str(NOTE_FONT_SIZE_POINTS).encode("ascii")

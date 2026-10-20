@@ -33,6 +33,12 @@
   right of and below slides without overlapping them, and the final page is
   ruled. `--line-spacing-px` controls rule spacing in CSS pixels.
 
+## Agent collaboration
+
+- After making changes, suggest a concise Conventional Commit message that
+  summarizes the complete set of changes. Do not create a commit unless the
+  user explicitly asks.
+
 ## Agent command execution
 
 - Do not run builds, tests, sample conversions, or other verification commands
