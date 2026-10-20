@@ -16,9 +16,12 @@ Command Prompt:
 .\pptx-to-letter-pdf.exe document.pdf
 ```
 
-PowerPoint presentations and PDFs are converted to ruled note-taking PDFs. The
-output is named `<input name>.note.taking.format.pdf` (with the input extension
-removed), for example `document.note.taking.format.pdf`.
+PowerPoint presentations and PDFs are converted to ruled note-taking PDFs. When
+a PDF and PPTX share the same name, the PDF supplies the page artwork and the
+PPTX supplies long-description speaker notes. A PDF without a PPTX is fitted
+directly; a PPTX without a PDF is rendered with LibreOffice first. The output is
+named `<input name>.note.taking.format.pdf` (with the input extension removed),
+for example `document.note.taking.format.pdf`.
 
 The executable extracts its bundled LibreOffice runtime to a temporary
 directory when launched, so startup takes longer and requires over 1 GB of

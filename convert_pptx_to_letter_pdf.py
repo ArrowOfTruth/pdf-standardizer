@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Convert PowerPoint presentations or PDFs to top-left-aligned PDF pages.
 
-Requires LibreOffice Impress and the Python package ``pypdf``
-(``python -m pip install -r requirements.txt``). The Windows release ZIP
-includes LibreOffice. Impress renders slides to an intermediate PDF; Python
-then applies the page size and placement. Defaults to 17-by-10-inch pages, with
-slides limited to 75% of page height.
+PPTX-only inputs require LibreOffice Impress; all inputs require the Python
+package ``pypdf`` (``python -m pip install -r requirements.txt``). The Windows
+release ZIP includes LibreOffice. When same-stem PDF and PPTX files are
+available, the PDF supplies rendered pages and the PPTX supplies long
+descriptions. A PDF-only input is fitted directly; a PPTX-only input is rendered
+by Impress first. Defaults to 17-by-10-inch pages, with slides limited to 75% of
+page height.
 """
 
 from __future__ import annotations
@@ -273,6 +275,18 @@ def _resolve_package_target(source_part: str, target: str) -> str:
         if target.startswith("/")
         else posixpath.join(posixpath.dirname(source_part), target_path)
     )
+
+
+def _find_matching_sibling(path: Path, suffix: str) -> Path | None:
+    """Find a same-stem sibling file with the requested extension."""
+    for candidate in path.parent.iterdir():
+        if (
+            candidate.is_file()
+            and candidate.suffix.casefold() == suffix.casefold()
+            and candidate.stem.casefold() == path.stem.casefold()
+        ):
+            return candidate
+    return None
 
 
 def fit_to_pages(
@@ -619,20 +633,39 @@ def main() -> None:
         input_files = [input_path]
     elif input_path.is_dir():
         iterator = input_path.rglob("*") if args.recurse else input_path.glob("*")
-        input_files = sorted(
+        candidates = sorted(
             path
             for path in iterator
             if path.is_file()
             and path.suffix.lower() in {".pptx", ".pdf"}
             and not path.name.lower().endswith(OUTPUT_SUFFIX)
         )
+        pdf_stems = {
+            (os.path.normcase(str(path.parent.resolve())), path.stem.casefold())
+            for path in candidates
+            if path.suffix.lower() == ".pdf"
+        }
+        input_files = [
+            path
+            for path in candidates
+            if path.suffix.lower() != ".pptx"
+            or (
+                os.path.normcase(str(path.parent.resolve())),
+                path.stem.casefold(),
+            )
+            not in pdf_stems
+        ]
         if not input_files:
             parser.error(f"No .pptx or .pdf files found in {input_path}")
     else:
         parser.error(f"Input path is neither a file nor a folder: {input_path}")
 
     libreoffice_path = None
-    if any(path.suffix.lower() == ".pptx" for path in input_files):
+    if any(
+        path.suffix.lower() == ".pptx"
+        and _find_matching_sibling(path, ".pdf") is None
+        for path in input_files
+    ):
         try:
             libreoffice_path = find_libreoffice(args.libreoffice)
         except FileNotFoundError as exc:
@@ -647,32 +680,38 @@ def main() -> None:
                     f"Output already exists: {output_path} "
                     "(pass --overwrite to replace it)"
                 )
-            slide_notes = {}
-            source_pdf = input_file
+            notes_pptx = (
+                input_file
+                if input_file.suffix.lower() == ".pptx"
+                else _find_matching_sibling(input_file, ".pptx")
+            )
+            slide_notes = (
+                extract_long_description_notes(notes_pptx)
+                if notes_pptx is not None
+                else {}
+            )
+            fit_arguments = (
+                args.page_width,
+                args.page_height,
+                args.max_vertical_ratio,
+                args.line_spacing_px,
+                slide_notes,
+            )
             if input_file.suffix.lower() == ".pptx":
-                slide_notes = extract_long_description_notes(input_file)
-                with tempfile.TemporaryDirectory(prefix="pptx_pdf_") as temp_dir:
-                    source_pdf = Path(temp_dir) / "libreoffice_export.pdf"
-                    export_with_libreoffice(input_file, source_pdf, libreoffice_path)
-                    fit_to_pages(
-                        source_pdf,
-                        output_path,
-                        args.page_width,
-                        args.page_height,
-                        args.max_vertical_ratio,
-                        args.line_spacing_px,
-                        slide_notes,
-                    )
+                source_pdf = _find_matching_sibling(input_file, ".pdf")
+                if source_pdf is None:
+                    with tempfile.TemporaryDirectory(prefix="pptx_pdf_") as temp_dir:
+                        source_pdf = Path(temp_dir) / "libreoffice_export.pdf"
+                        export_with_libreoffice(
+                            input_file,
+                            source_pdf,
+                            libreoffice_path,
+                        )
+                        fit_to_pages(source_pdf, output_path, *fit_arguments)
+                else:
+                    fit_to_pages(source_pdf, output_path, *fit_arguments)
             else:
-                fit_to_pages(
-                    source_pdf,
-                    output_path,
-                    args.page_width,
-                    args.page_height,
-                    args.max_vertical_ratio,
-                    args.line_spacing_px,
-                    slide_notes,
-                )
+                fit_to_pages(input_file, output_path, *fit_arguments)
             print(f"Created {output_path}")
         except Exception as exc:
             failures += 1

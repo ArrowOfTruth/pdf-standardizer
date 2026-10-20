@@ -531,6 +531,76 @@ class OutputHandlingTests(unittest.TestCase):
             self.assertEqual(float(output_reader.pages[0].mediabox.width), 1224)
             self.assertEqual(len(PdfReader(str(input_path)).pages), 1)
 
+    def test_matching_pdf_and_pptx_combine_rendering_and_notes(self) -> None:
+        """Use the matching PDF for pages and its PPTX for long descriptions."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_pdf = Path(temp_dir) / "source.pdf"
+            input_pptx = Path(temp_dir) / "source.pptx"
+            writer = PdfWriter()
+            writer.add_blank_page(width=72, height=72)
+            with input_pdf.open("wb") as pdf_file:
+                writer.write(pdf_file)
+            input_pptx.touch()
+            notes = {1: "Long Description:\nA sample description."}
+
+            for input_path in (input_pdf, input_pptx):
+                with self.subTest(input=input_path.suffix):
+                    with (
+                        patch.object(sys, "argv", ["converter", str(input_path)]),
+                        patch.object(
+                            converter,
+                            "find_libreoffice",
+                        ) as find_libreoffice,
+                        patch.object(
+                            converter,
+                            "export_with_libreoffice",
+                        ) as export,
+                        patch.object(
+                            converter,
+                            "extract_long_description_notes",
+                            return_value=notes,
+                        ) as extract_notes,
+                        patch.object(converter, "fit_to_pages") as fit,
+                        contextlib.redirect_stdout(io.StringIO()),
+                    ):
+                        converter.main()
+
+                find_libreoffice.assert_not_called()
+                export.assert_not_called()
+                extract_notes.assert_called_once_with(input_pptx.resolve())
+                self.assertEqual(fit.call_args.args[0], input_pdf.resolve())
+                self.assertEqual(fit.call_args.args[-1], notes)
+
+    def test_folder_processes_matching_pdf_and_pptx_once(self) -> None:
+        """Avoid duplicate conversions when a directory contains a pair."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_dir = Path(temp_dir)
+            input_pdf = input_dir / "source.pdf"
+            input_pptx = input_dir / "source.pptx"
+            writer = PdfWriter()
+            writer.add_blank_page(width=72, height=72)
+            with input_pdf.open("wb") as pdf_file:
+                writer.write(pdf_file)
+            input_pptx.touch()
+            with (
+                patch.object(sys, "argv", ["converter", str(input_dir)]),
+                patch.object(converter, "find_libreoffice") as find_libreoffice,
+                patch.object(converter, "export_with_libreoffice") as export,
+                patch.object(
+                    converter,
+                    "extract_long_description_notes",
+                    return_value={},
+                ),
+                patch.object(converter, "fit_to_pages") as fit,
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                converter.main()
+
+            find_libreoffice.assert_not_called()
+            export.assert_not_called()
+            fit.assert_called_once()
+            self.assertEqual(fit.call_args.args[0], input_pdf)
+
 
 if __name__ == "__main__":
     unittest.main()
