@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/ArrowOfTruth/pdf-standardizer/compare/pdf-standardizer-v0.7.0...pdf-standardizer-v0.8.0) (2026-10-20)
+
+
+### Features
+
+* normalize Windows paths in folder pairing case ([1a2512e](https://github.com/ArrowOfTruth/pdf-standardizer/commit/1a2512ed5717611a10a4a5498ff0004f43739d82))
+
 ## [0.7.0](https://github.com/ArrowOfTruth/pdf-standardizer/compare/pdf-standardizer-v0.6.0...pdf-standardizer-v0.7.0) (2026-10-20)
 
 
