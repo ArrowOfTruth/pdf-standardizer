@@ -35,47 +35,12 @@ jobs:
         with:
           python-version: "3.x"
 
-      - name: Install dependencies
-        run: python -m pip install -r requirements-build.txt
-
-      - name: Run unit tests
-        run: python -m unittest discover -s tests -v
-
-      - name: Download, verify, and extract latest LibreOffice
+      - name: Build and validate executable
         shell: pwsh
         run: |
-          .\build-locally\prepare-libreoffice.ps1
+          & .\build-locally\build.ps1
           if ($LASTEXITCODE -ne 0) {
-            throw "Failed to download, verify, and extract LibreOffice."
-          }
-
-      - name: Build executable with embedded LibreOffice
-        shell: pwsh
-        run: |
-          pyinstaller --noconfirm --clean --onefile `
-            --name pptx-to-letter-pdf `
-            --add-data "dist\LibreOffice;LibreOffice" `
-            convert_pptx_to_letter_pdf.py
-          if ($LASTEXITCODE -ne 0) {
-            throw "PyInstaller failed to bundle LibreOffice."
-          }
-          & "./dist/pptx-to-letter-pdf.exe" --help
-          if ($LASTEXITCODE -ne 0) {
-            throw "Bundled executable failed its --help check."
-          }
-
-      - name: Test bundled conversion with fixture
-        if: ${{ hashFiles('test-data/test.pptx') != '' }}
-        shell: pwsh
-        run: |
-          $fixturePath = (Resolve-Path "test-data\test.pptx").Path
-          & "./dist/pptx-to-letter-pdf.exe" $fixturePath --overwrite
-          if ($LASTEXITCODE -ne 0) {
-            throw "The bundled executable failed to convert the PowerPoint fixture."
-          }
-          & python -c "from pypdf import PdfReader; reader = PdfReader(r'test-data\test.note.taking.format.pdf'); assert len(reader.pages) > 0, 'Conversion produced an empty PDF'; print(f'Validated {len(reader.pages)} PDF pages')"
-          if ($LASTEXITCODE -ne 0) {
-            throw "The generated fixture PDF is invalid."
+            throw "The local build script failed."
           }
 
       - name: Publish GitHub Release

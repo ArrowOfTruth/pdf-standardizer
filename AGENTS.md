@@ -26,8 +26,9 @@
 
 - Follow existing formatting and add Google-style docstrings when documenting
   functions or classes.
-- Keep dependencies pinned in the existing requirements files; update the
-  release workflow and tests when changing packaged dependencies.
+- Keep dependencies intentionally unpinned in the requirements files so builds
+  use current releases. Update the requirements files, build workflow, and
+  tests when changing packaged dependencies.
 
 ## Developer commands
 

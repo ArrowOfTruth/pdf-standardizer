@@ -196,19 +196,25 @@ def extract_long_description_notes(pptx_path: Path) -> dict[int, str]:
     drawing_text_tag = f"{{{DRAWING_NS}}}t"
 
     with zipfile.ZipFile(pptx_path) as package:
+        package_names = package.namelist()
+        package_name_set = set(package_names)
         presentation_root = ET.fromstring(package.read(presentation_part))
         presentation_relationships_root = ET.fromstring(
             package.read(presentation_relationships_part)
         )
         presentation_relationships = {
             relationship.get("Id"): relationship.get("Target")
-            for relationship in presentation_relationships_root.findall(relationship_tag)
+            for relationship in presentation_relationships_root.findall(
+                relationship_tag
+            )
         }
         slide_numbers: dict[str, int] = {}
         slide_list = presentation_root.find(slide_list_tag)
         if slide_list is None:
             return {}
-        for slide_number, slide_element in enumerate(slide_list.findall(slide_tag), start=1):
+        for slide_number, slide_element in enumerate(
+            slide_list.findall(slide_tag), start=1
+        ):
             relationship_id = slide_element.get(f"{{{OFFICE_REL_NS}}}id")
             target = presentation_relationships.get(relationship_id)
             if target is not None:
@@ -216,7 +222,7 @@ def extract_long_description_notes(pptx_path: Path) -> dict[int, str]:
                 slide_numbers[slide_part] = slide_number
 
         notes: dict[int, str] = {}
-        for notes_part in package.namelist():
+        for notes_part in package_names:
             notes_filename = posixpath.basename(notes_part)
             if (
                 posixpath.dirname(notes_part) != notes_directory
@@ -230,7 +236,7 @@ def extract_long_description_notes(pptx_path: Path) -> dict[int, str]:
                 "_rels",
                 f"{notes_filename}.rels",
             )
-            if notes_relationships_part not in package.namelist():
+            if notes_relationships_part not in package_name_set:
                 continue
             notes_relationships_root = ET.fromstring(
                 package.read(notes_relationships_part)
@@ -257,7 +263,12 @@ def extract_long_description_notes(pptx_path: Path) -> dict[int, str]:
                     if placeholder is None or placeholder.get("type") != "body":
                         continue
                     paragraphs.extend(
-                        "".join(text.text or "" for text in paragraph.findall(f".//{drawing_text_tag}"))
+                        "".join(
+                            text.text or ""
+                            for text in paragraph.findall(
+                                f".//{drawing_text_tag}"
+                            )
+                        )
                         for paragraph in shape.findall(f".//{drawing_paragraph_tag}")
                     )
                 note_text = "\n".join(paragraphs).strip()
@@ -278,16 +289,9 @@ def _resolve_package_target(source_part: str, target: str) -> str:
     )
 
 
-def _find_matching_sibling(path: Path, suffix: str) -> Path | None:
-    """Find a same-stem sibling file with the requested extension."""
-    for candidate in path.parent.iterdir():
-        if (
-            candidate.is_file()
-            and candidate.suffix.casefold() == suffix.casefold()
-            and candidate.stem.casefold() == path.stem.casefold()
-        ):
-            return candidate
-    return None
+def _input_group_key(path: Path) -> tuple[str, str]:
+    """Return a normalized directory and stem key for matching inputs."""
+    return os.path.normcase(str(path.parent.resolve())), path.stem.casefold()
 
 
 def fit_to_pages(
@@ -514,7 +518,11 @@ def _add_rule_lines(
     while y >= line_spacing_points:
         if slide_bounds is None:
             segments.append(
-                (RULE_HORIZONTAL_MARGIN_POINTS, page_width_points - RULE_HORIZONTAL_MARGIN_POINTS, y)
+                (
+                    RULE_HORIZONTAL_MARGIN_POINTS,
+                    page_width_points - RULE_HORIZONTAL_MARGIN_POINTS,
+                    y,
+                )
             )
         else:
             _, slide_bottom, slide_right, slide_top = slide_bounds
@@ -630,41 +638,53 @@ def main() -> None:
         parser.error(f"Input path does not exist: {input_path}")
     if input_path.is_file():
         if input_path.suffix.lower() not in {".pptx", ".pdf"}:
-            parser.error(f"Input file must have a .pptx or .pdf extension: {input_path}")
+            parser.error(
+                f"Input file must have a .pptx or .pdf extension: {input_path}"
+            )
         input_files = [input_path]
+        candidate_files = [
+            path
+            for path in input_path.parent.iterdir()
+            if path.is_file()
+            and path.suffix.lower() in {".pptx", ".pdf"}
+            and not path.name.lower().endswith(OUTPUT_SUFFIX)
+        ]
     elif input_path.is_dir():
         iterator = input_path.rglob("*") if args.recurse else input_path.glob("*")
-        candidates = sorted(
+        candidate_files = sorted(
             path
             for path in iterator
             if path.is_file()
             and path.suffix.lower() in {".pptx", ".pdf"}
             and not path.name.lower().endswith(OUTPUT_SUFFIX)
         )
-        pdf_stems = {
-            (os.path.normcase(str(path.parent.resolve())), path.stem.casefold())
-            for path in candidates
-            if path.suffix.lower() == ".pdf"
-        }
-        input_files = [
-            path
-            for path in candidates
-            if path.suffix.lower() != ".pptx"
-            or (
-                os.path.normcase(str(path.parent.resolve())),
-                path.stem.casefold(),
-            )
-            not in pdf_stems
-        ]
-        if not input_files:
+        if not candidate_files:
             parser.error(f"No .pptx or .pdf files found in {input_path}")
+        input_files = candidate_files
     else:
         parser.error(f"Input path is neither a file nor a folder: {input_path}")
+
+    files_by_stem: dict[tuple[str, str], dict[str, Path]] = {}
+    for candidate_file in candidate_files:
+        files_by_stem.setdefault(_input_group_key(candidate_file), {})[
+            candidate_file.suffix.casefold()
+        ] = candidate_file
+    if input_path.is_dir():
+        input_files = [
+            path
+            for path in candidate_files
+            if path.suffix.casefold() != ".pptx"
+            or ".pdf" not in files_by_stem[_input_group_key(path)]
+        ]
+    sibling_files = {
+        path: files_by_stem.get(_input_group_key(path), {})
+        for path in input_files
+    }
 
     libreoffice_path = None
     if any(
         path.suffix.lower() == ".pptx"
-        and _find_matching_sibling(path, ".pdf") is None
+        and ".pdf" not in sibling_files[path]
         for path in input_files
     ):
         try:
@@ -684,7 +704,7 @@ def main() -> None:
             notes_pptx = (
                 input_file
                 if input_file.suffix.lower() == ".pptx"
-                else _find_matching_sibling(input_file, ".pptx")
+                else sibling_files[input_file].get(".pptx")
             )
             slide_notes = (
                 extract_long_description_notes(notes_pptx)
@@ -699,7 +719,7 @@ def main() -> None:
                 slide_notes,
             )
             if input_file.suffix.lower() == ".pptx":
-                source_pdf = _find_matching_sibling(input_file, ".pdf")
+                source_pdf = sibling_files[input_file].get(".pdf")
                 if source_pdf is None:
                     with tempfile.TemporaryDirectory(prefix="pptx_pdf_") as temp_dir:
                         source_pdf = Path(temp_dir) / "libreoffice_export.pdf"

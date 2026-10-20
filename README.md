@@ -82,11 +82,12 @@ Use commit prefixes to select the version bump:
 - Add `!` after the type (for example, `feat!:`) or a `BREAKING CHANGE:`
   footer for a major release, such as `0.1.0` to `1.0.0`
 
-GitHub Actions installs the pinned Python dependencies, downloads and verifies
-the LibreOffice MSI checksum, extracts its runtime, and embeds it in the
-executable. If `test-data/test.pptx` is present in the repository, the workflow
-converts it with the packaged executable and checks the resulting PDF before
-publishing or uploading the build.
+GitHub Actions installs the Python dependencies listed in the requirements
+files. They are intentionally unpinned, so each build uses current package
+releases. The workflow downloads and verifies the LibreOffice MSI checksum,
+extracts its runtime, and embeds it in the executable. If `test-data/test.pptx`
+is present, the build converts it and checks the resulting PDF before
+publishing or uploading the executable.
 
 ## Build locally
 

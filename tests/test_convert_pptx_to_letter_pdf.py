@@ -107,7 +107,10 @@ class LibreOfficeExportTests(unittest.TestCase):
             def export_pdf(
                 command: list[str], **kwargs: object
             ) -> subprocess.CompletedProcess:
-                self.assertEqual(kwargs["timeout"], converter.LIBREOFFICE_TIMEOUT_SECONDS)
+                self.assertEqual(
+                    kwargs["timeout"],
+                    converter.LIBREOFFICE_TIMEOUT_SECONDS,
+                )
                 export_dir = Path(command[command.index("--outdir") + 1])
                 writer = PdfWriter()
                 writer.add_blank_page(width=72, height=72)
@@ -144,7 +147,10 @@ class LibreOfficeExportTests(unittest.TestCase):
                 timeout=converter.LIBREOFFICE_TIMEOUT_SECONDS,
             )
             with patch.object(converter.subprocess, "run", side_effect=timeout):
-                with self.assertRaisesRegex(RuntimeError, "timed out after 300 seconds"):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "timed out after 300 seconds",
+                ):
                     converter.export_with_libreoffice(
                         input_path, output_path, Path("soffice.com")
                     )
@@ -418,7 +424,10 @@ class FitToPagesTests(unittest.TestCase):
             )
 
             reader = PdfReader(str(output_path))
-            operations = ContentStream(reader.pages[1].get_contents(), reader).operations
+            operations = ContentStream(
+                reader.pages[1].get_contents(),
+                reader,
+            ).operations
             rendered_lines = [
                 str(operands[0])
                 for operands, operator in operations
@@ -558,7 +567,11 @@ class OutputHandlingTests(unittest.TestCase):
                     "find_libreoffice",
                     return_value=Path("soffice.com"),
                 ),
-                patch.object(converter, "extract_long_description_notes", return_value={}),
+                patch.object(
+                    converter,
+                    "extract_long_description_notes",
+                    return_value={},
+                ),
                 contextlib.redirect_stdout(io.StringIO()),
             ):
                 converter.main()
