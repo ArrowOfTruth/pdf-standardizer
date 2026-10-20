@@ -53,7 +53,8 @@ jobs:
         if: needs.release-please.outputs.release_created != 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: pptx-to-letter-pdf-windows-x64-${{ github.sha }}
+          name: pptx-to-letter-pdf-windows-x64
           path: dist/pptx-to-letter-pdf.exe
           if-no-files-found: error
           retention-days: 14
+          overwrite: true
