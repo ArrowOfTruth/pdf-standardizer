@@ -446,7 +446,9 @@ class OutputHandlingTests(unittest.TestCase):
         """Preserve an existing PDF and report that overwrite was not enabled."""
         with tempfile.TemporaryDirectory() as temp_dir:
             input_path = Path(temp_dir) / "presentation.pptx"
-            output_path = input_path.with_suffix(".pdf")
+            output_path = input_path.with_name(
+                f"{input_path.stem}{converter.OUTPUT_SUFFIX}"
+            )
             input_path.touch()
             output_path.write_bytes(b"existing PDF")
             with (
@@ -469,7 +471,9 @@ class OutputHandlingTests(unittest.TestCase):
         """Allow an existing PDF to be replaced when explicitly requested."""
         with tempfile.TemporaryDirectory() as temp_dir:
             input_path = Path(temp_dir) / "presentation.pptx"
-            output_path = input_path.with_suffix(".pdf")
+            output_path = input_path.with_name(
+                f"{input_path.stem}{converter.OUTPUT_SUFFIX}"
+            )
             input_path.touch()
             output_path.write_bytes(b"existing PDF")
 
@@ -499,6 +503,33 @@ class OutputHandlingTests(unittest.TestCase):
                 converter.main()
 
             self.assertEqual(output_path.read_bytes(), b"new PDF")
+
+    def test_pdf_input_is_fitted_without_libreoffice(self) -> None:
+        """Fit a PDF directly and write to the collision-safe output name."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            input_path = Path(temp_dir) / "source.pdf"
+            writer = PdfWriter()
+            writer.add_blank_page(width=72, height=72)
+            with input_path.open("wb") as input_file:
+                writer.write(input_file)
+            output_path = input_path.with_name(
+                f"{input_path.stem}{converter.OUTPUT_SUFFIX}"
+            )
+            with (
+                patch.object(sys, "argv", ["converter", str(input_path)]),
+                patch.object(converter, "find_libreoffice") as find_libreoffice,
+                patch.object(converter, "export_with_libreoffice") as export,
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                converter.main()
+
+            find_libreoffice.assert_not_called()
+            export.assert_not_called()
+            self.assertTrue(output_path.is_file())
+            output_reader = PdfReader(str(output_path))
+            self.assertEqual(len(output_reader.pages), 2)
+            self.assertEqual(float(output_reader.pages[0].mediabox.width), 1224)
+            self.assertEqual(len(PdfReader(str(input_path)).pages), 1)
 
 
 if __name__ == "__main__":

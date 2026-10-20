@@ -13,7 +13,12 @@ Command Prompt:
 
 ```powershell
 .\pptx-to-letter-pdf.exe presentation.pptx
+.\pptx-to-letter-pdf.exe document.pdf
 ```
+
+PowerPoint presentations and PDFs are converted to ruled note-taking PDFs. The
+output is named `<input name>.note.taking.format.pdf` (with the input extension
+removed), for example `document.note.taking.format.pdf`.
 
 The executable extracts its bundled LibreOffice runtime to a temporary
 directory when launched, so startup takes longer and requires over 1 GB of
@@ -82,23 +87,20 @@ publishing or uploading the build.
 
 ## Build locally
 
-Install Docker Desktop on Windows and switch it to **Windows containers**.
-The Windows container engine must be running, and the host must support Windows
-containers. From the repository root, run:
+Install Python 3 on Windows and ensure `python` is available on `PATH`. From the
+repository root, run:
 
 ```powershell
 .\build-locally\build.ps1
 ```
 
-The local Windows container and GitHub Actions use the latest stable Python
-release rather than pinning to a specific minor version. The build installs the
-latest pypdf and PyInstaller releases, and selects the latest stable LibreOffice
+The script creates or reuses a `.venv` in the repository, installs the latest
+`pypdf` and PyInstaller releases, and selects the latest stable LibreOffice
 release from The Document Foundation's download index, verifying its published
 MSI checksum before extraction. It then runs the unit tests, builds the
-executable, checks its help output, and runs the sample conversion check. Docker
-writes build outputs back to the working tree; the executable is
-`dist\pptx-to-letter-pdf.exe`. The first run downloads the Python container
-image and LibreOffice MSI.
+executable, checks its help output, and runs the sample conversion check. The
+executable is `dist\pptx-to-letter-pdf.exe`. The first run downloads Python
+packages and the LibreOffice MSI.
 
 ### Test with the sample presentation
 
@@ -109,7 +111,8 @@ local executable:
 .\dist\pptx-to-letter-pdf.exe .\test-data\test.pptx --overwrite --line-spacing-px 48
 ```
 
-This writes `test-data\test.pdf`. The generated PDF is ignored by Git. Check
+This writes `test-data\test.note.taking.format.pdf`. The generated PDF is
+ignored by Git. Check
 that the PDF opens, its pages have the configured output dimensions, and it
 ends with one ruled page matching the other pages' size. The GitHub Actions
 workflow currently checks that this conversion produces a non-empty PDF.

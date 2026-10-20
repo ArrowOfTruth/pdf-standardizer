@@ -1,30 +1,66 @@
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$imageTag = 'pptx-to-letter-pdf-local:latest'
-$dockerfilePath = Join-Path $PSScriptRoot 'Dockerfile'
+Set-Location $repoRoot
 
-# These checks and Docker commands run on the Windows host.
-$engineOs = & docker info --format '{{.OSType}}'
-if ($LASTEXITCODE -ne 0) {
-    throw 'Docker is unavailable. Start Docker Desktop with Windows containers enabled.'
-}
-if ($engineOs.Trim() -ne 'windows') {
-    throw 'Docker is using a Linux container engine. Switch Docker Desktop to Windows containers and retry.'
+$pythonCommand = Get-Command python -ErrorAction SilentlyContinue
+if ($null -eq $pythonCommand) {
+    throw 'Python 3 is required. Install Python and add it to PATH, then rerun this script.'
 }
 
-# Build the local image from the Dockerfile; the Python build steps run in its container.
-& docker build --tag $imageTag --file $dockerfilePath $PSScriptRoot
+& python --version
 if ($LASTEXITCODE -ne 0) {
-    throw 'Failed to build the local Windows build image.'
+    throw 'The python command could not run. Install Python 3 and add it to PATH, then rerun this script.'
 }
 
-# The repository is mounted into the container, so dist outputs persist on the host.
-# LibreOffice is extracted and checked inside that container, not on the host.
-& docker run --rm `
-    --mount "type=bind,source=$repoRoot,target=C:\workspace" `
-    --workdir C:\workspace `
-    $imageTag
-if ($LASTEXITCODE -ne 0) {
-    throw 'The build inside the Docker container failed.'
+$venvPython = Join-Path $repoRoot '.venv\Scripts\python.exe'
+if (-not (Test-Path -LiteralPath $venvPython)) {
+    & python -m venv '.venv'
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Failed to create the local Python virtual environment.'
+    }
 }
+
+& $venvPython -m pip install -r requirements-build.txt
+if ($LASTEXITCODE -ne 0) {
+    throw 'Failed to install build dependencies.'
+}
+
+& $venvPython -m unittest discover -s tests -v
+if ($LASTEXITCODE -ne 0) {
+    throw 'Unit tests failed.'
+}
+
+& (Join-Path $PSScriptRoot 'prepare-libreoffice.ps1')
+if ($LASTEXITCODE -ne 0) {
+    throw 'Failed to download, verify, and extract LibreOffice.'
+}
+
+& $venvPython -m PyInstaller --noconfirm --clean --onefile `
+    --name pptx-to-letter-pdf `
+    --add-data 'dist\LibreOffice;LibreOffice' `
+    convert_pptx_to_letter_pdf.py
+if ($LASTEXITCODE -ne 0) {
+    throw 'PyInstaller failed to bundle LibreOffice.'
+}
+
+& '.\dist\pptx-to-letter-pdf.exe' --help
+if ($LASTEXITCODE -ne 0) {
+    throw 'Bundled executable failed its --help check.'
+}
+
+$fixture = 'test-data\test.pptx'
+if (Test-Path -LiteralPath $fixture) {
+    $fixturePath = (Resolve-Path $fixture).Path
+    & '.\dist\pptx-to-letter-pdf.exe' $fixturePath --overwrite
+    if ($LASTEXITCODE -ne 0) {
+        throw 'The bundled executable failed to convert the PowerPoint fixture.'
+    }
+    & $venvPython -c "from pypdf import PdfReader; reader = PdfReader(r'test-data\test.note.taking.format.pdf'); assert len(reader.pages) > 0, 'Conversion produced an empty PDF'; print(f'Validated {len(reader.pages)} PDF pages')"
+    if ($LASTEXITCODE -ne 0) {
+        throw 'The generated fixture PDF is invalid.'
+    }
+}
+
+Write-Host 'Build complete: dist\pptx-to-letter-pdf.exe'

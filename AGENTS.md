@@ -2,7 +2,8 @@
 
 ## Project behavior
 
-- This is a Windows-focused Python CLI that converts `.pptx` files to PDFs.
+- This is a Windows-focused Python CLI that converts `.pptx` presentations and
+  `.pdf` files to ruled note-taking PDFs.
 - LibreOffice Impress renders presentations; `pypdf` then fits the pages to the
   requested output size. Do not reintroduce a Microsoft PowerPoint dependency.
 - The release executable bundles Python, `pypdf`, and LibreOffice. Preserve
@@ -22,21 +23,20 @@
   8.3-name spelling.
 - Run the sample end-to-end check with the bundled executable:
   `.\dist\pptx-to-letter-pdf.exe .\test-data\test.pptx --overwrite`
-  The generated `test-data\test.pdf` is ignored; verify it is valid, every page
-  has the configured dimensions, writing lines appear to the right of and below
-  slides without overlapping them, and the final page is ruled. `--line-spacing-px`
-  controls rule spacing in CSS pixels.
+  The generated `test-data\test.note.taking.format.pdf` is ignored; verify it is
+  valid, every page has the configured dimensions, writing lines appear to the
+  right of and below slides without overlapping them, and the final page is
+  ruled. `--line-spacing-px` controls rule spacing in CSS pixels.
 
 ## Builds and releases
 
 - The GitHub Actions workflow builds and tests on pushes to `main`. Preserve the
   bundled LibreOffice conversion check using `test-data/test.pptx`.
-- For a local release-like build, require Docker Desktop with Windows
-  containers enabled and run `build-locally\build.ps1` from the repository
-  root. The container mirrors the GitHub workflow's dependency installation,
-  tests, verified LibreOffice extraction, PyInstaller build, and bundled
-  executable checks. The executable is written to
-  `dist\pptx-to-letter-pdf.exe`.
+- For a local release-like build, require Python 3 on `PATH` and run
+  `build-locally\build.ps1` from the repository root. It creates/reuses a local
+  `.venv`, installs build dependencies, runs tests, verifies and extracts
+  LibreOffice, builds the executable, and checks the bundled executable. The
+  executable is written to `dist\pptx-to-letter-pdf.exe`.
 - Verify the LibreOffice download checksum before extracting or packaging it.
 - Use Conventional Commit prefixes so Release Please can select the SemVer
   bump: `fix:` for patch, `feat:` for minor, and `!` or a `BREAKING CHANGE:`

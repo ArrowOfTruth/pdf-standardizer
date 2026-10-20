@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert PowerPoint presentations to top-left-aligned PDF pages.
+"""Convert PowerPoint presentations or PDFs to top-left-aligned PDF pages.
 
 Requires LibreOffice Impress and the Python package ``pypdf``
 (``python -m pip install -r requirements.txt``). The Windows release ZIP
@@ -42,6 +42,7 @@ PRESENTATION_NS = "http://schemas.openxmlformats.org/presentationml/2006/main"
 DRAWING_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
 OFFICE_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 PACKAGE_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
+OUTPUT_SUFFIX = ".note.taking.format.pdf"
 
 
 def find_libreoffice(explicit_path: Path | None = None) -> Path:
@@ -540,7 +541,7 @@ def _add_rule_lines(
 
 
 def main() -> None:
-    """Parse command-line arguments and convert one presentation or a folder.
+    """Parse command-line arguments and convert one file or a folder.
 
     Raises:
         SystemExit: If arguments are invalid or one or more conversions fail.
@@ -552,7 +553,7 @@ def main() -> None:
     parser.add_argument(
         "input",
         type=Path,
-        help="Required .pptx file to convert, or folder containing .pptx files",
+        help="Required .pptx or .pdf file to convert, or folder containing either",
     )
     parser.add_argument(
         "--page-width",
@@ -588,7 +589,7 @@ def main() -> None:
     parser.add_argument(
         "--recurse",
         action="store_true",
-        help="When input is a folder, search its subfolders for .pptx files",
+        help="When input is a folder, search its subfolders for .pptx and .pdf files",
     )
     parser.add_argument(
         "--overwrite",
@@ -613,39 +614,58 @@ def main() -> None:
     if not input_path.exists():
         parser.error(f"Input path does not exist: {input_path}")
     if input_path.is_file():
-        if input_path.suffix.lower() != ".pptx":
-            parser.error(f"Input file must have a .pptx extension: {input_path}")
-        presentations = [input_path]
+        if input_path.suffix.lower() not in {".pptx", ".pdf"}:
+            parser.error(f"Input file must have a .pptx or .pdf extension: {input_path}")
+        input_files = [input_path]
     elif input_path.is_dir():
         iterator = input_path.rglob("*") if args.recurse else input_path.glob("*")
-        presentations = sorted(
-            path for path in iterator if path.is_file() and path.suffix.lower() == ".pptx"
+        input_files = sorted(
+            path
+            for path in iterator
+            if path.is_file()
+            and path.suffix.lower() in {".pptx", ".pdf"}
+            and not path.name.lower().endswith(OUTPUT_SUFFIX)
         )
-        if not presentations:
-            parser.error(f"No .pptx files found in {input_path}")
+        if not input_files:
+            parser.error(f"No .pptx or .pdf files found in {input_path}")
     else:
         parser.error(f"Input path is neither a file nor a folder: {input_path}")
 
-    try:
-        libreoffice_path = find_libreoffice(args.libreoffice)
-    except FileNotFoundError as exc:
-        parser.error(str(exc))
+    libreoffice_path = None
+    if any(path.suffix.lower() == ".pptx" for path in input_files):
+        try:
+            libreoffice_path = find_libreoffice(args.libreoffice)
+        except FileNotFoundError as exc:
+            parser.error(str(exc))
 
     failures = 0
-    for pptx_path in presentations:
-        output_path = pptx_path.with_suffix(".pdf")
+    for input_file in input_files:
+        output_path = input_file.with_name(f"{input_file.stem}{OUTPUT_SUFFIX}")
         try:
             if output_path.exists() and not args.overwrite:
                 raise FileExistsError(
                     f"Output already exists: {output_path} "
                     "(pass --overwrite to replace it)"
                 )
-            slide_notes = extract_long_description_notes(pptx_path)
-            with tempfile.TemporaryDirectory(prefix="pptx_pdf_") as temp_dir:
-                intermediate = Path(temp_dir) / "libreoffice_export.pdf"
-                export_with_libreoffice(pptx_path, intermediate, libreoffice_path)
+            slide_notes = {}
+            source_pdf = input_file
+            if input_file.suffix.lower() == ".pptx":
+                slide_notes = extract_long_description_notes(input_file)
+                with tempfile.TemporaryDirectory(prefix="pptx_pdf_") as temp_dir:
+                    source_pdf = Path(temp_dir) / "libreoffice_export.pdf"
+                    export_with_libreoffice(input_file, source_pdf, libreoffice_path)
+                    fit_to_pages(
+                        source_pdf,
+                        output_path,
+                        args.page_width,
+                        args.page_height,
+                        args.max_vertical_ratio,
+                        args.line_spacing_px,
+                        slide_notes,
+                    )
+            else:
                 fit_to_pages(
-                    intermediate,
+                    source_pdf,
                     output_path,
                     args.page_width,
                     args.page_height,
@@ -656,10 +676,10 @@ def main() -> None:
             print(f"Created {output_path}")
         except Exception as exc:
             failures += 1
-            print(f"Failed to convert {pptx_path}: {exc}")
+            print(f"Failed to convert {input_file}: {exc}")
 
     if failures:
-        raise SystemExit(f"{failures} of {len(presentations)} file(s) failed to convert.")
+        raise SystemExit(f"{failures} of {len(input_files)} file(s) failed to convert.")
 
 
 if __name__ == "__main__":

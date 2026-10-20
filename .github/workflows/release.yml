@@ -73,7 +73,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw "The bundled executable failed to convert the PowerPoint fixture."
           }
-          & python -c "from pypdf import PdfReader; reader = PdfReader(r'test-data\test.pdf'); assert len(reader.pages) > 0, 'Conversion produced an empty PDF'; print(f'Validated {len(reader.pages)} PDF pages')"
+          & python -c "from pypdf import PdfReader; reader = PdfReader(r'test-data\test.note.taking.format.pdf'); assert len(reader.pages) > 0, 'Conversion produced an empty PDF'; print(f'Validated {len(reader.pages)} PDF pages')"
           if ($LASTEXITCODE -ne 0) {
             throw "The generated fixture PDF is invalid."
           }
