@@ -673,7 +673,10 @@ class OutputHandlingTests(unittest.TestCase):
             find_libreoffice.assert_not_called()
             export.assert_not_called()
             fit.assert_called_once()
-            self.assertEqual(fit.call_args.args[0], input_pdf)
+            self.assertEqual(
+                Path(fit.call_args.args[0]).resolve(),
+                input_pdf.resolve(),
+            )
 
 
 if __name__ == "__main__":
