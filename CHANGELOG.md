@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.2](https://github.com/ArrowOfTruth/pdf-standardizer/compare/pdf-standardizer-v0.10.1...pdf-standardizer-v0.10.2) (2026-11-05)
+
+
+### Bug Fixes
+
+* recognize official GitHub builds ([2e01432](https://github.com/ArrowOfTruth/pdf-standardizer/commit/2e01432a0673c4f52e093fffd7fe5e448b6c1d94))
+
 ## [0.10.1](https://github.com/ArrowOfTruth/pdf-standardizer/compare/pdf-standardizer-v0.10.0...pdf-standardizer-v0.10.1) (2026-11-05)
 
 
