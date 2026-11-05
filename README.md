@@ -28,6 +28,17 @@ line spacing, and replace existing outputs when requested. Starting the
 executable without command-line arguments opens the interface; supplying
 arguments continues to use the command-line options below.
 
+Use `--version` to display the version number for the corresponding GitHub
+Release:
+
+```powershell
+.\pptx-to-letter-pdf.exe --version
+```
+
+The version is read from the Release Please manifest, so release builds report
+the same version as their GitHub Release. Builds made outside GitHub Actions
+append `(unofficial build)` to the displayed version.
+
 The executable extracts its bundled LibreOffice runtime to a temporary
 directory when launched, so startup takes longer and requires over 1 GB of
 temporary disk space. The executable is large (about 643 MB in the current

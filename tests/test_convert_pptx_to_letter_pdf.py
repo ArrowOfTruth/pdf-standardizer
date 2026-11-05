@@ -512,6 +512,50 @@ class FitToPagesTests(unittest.TestCase):
 class OutputHandlingTests(unittest.TestCase):
     """Tests for protecting existing conversion results."""
 
+    def test_version_flag_reports_release_please_version(self) -> None:
+        """Print the local build label with the Release Please version."""
+        with (
+            patch.object(sys, "argv", ["converter", "--version"]),
+            contextlib.redirect_stdout(io.StringIO()) as output,
+            self.assertRaises(SystemExit) as exit_context,
+        ):
+            converter.main()
+
+        self.assertEqual(exit_context.exception.code, 0)
+        self.assertEqual(output.getvalue(), f"converter {converter.get_version()}\n")
+        self.assertIn("(unofficial build)", output.getvalue())
+
+    def test_version_is_official_only_for_marked_frozen_build(self) -> None:
+        """Label only marked frozen executables as official builds."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            bundle_dir = Path(temp_dir)
+            (bundle_dir / ".release-please-manifest.json").write_text(
+                '{".": "1.2.3"}',
+                encoding="utf-8",
+            )
+            marker_path = bundle_dir / "official-build.marker"
+            for is_official in (False, True):
+                with self.subTest(is_official=is_official):
+                    if is_official:
+                        marker_path.touch()
+                    else:
+                        marker_path.unlink(missing_ok=True)
+                    with (
+                        patch.object(
+                            converter.sys,
+                            "_MEIPASS",
+                            str(bundle_dir),
+                            create=True,
+                        ),
+                        patch.object(converter.sys, "frozen", True, create=True),
+                    ):
+                        expected = (
+                            "1.2.3"
+                            if is_official
+                            else "1.2.3 (unofficial build)"
+                        )
+                        self.assertEqual(converter.get_version(), expected)
+
     def test_no_arguments_launches_gui(self) -> None:
         """Open the GUI when the executable is started without arguments."""
         with (

@@ -13,6 +13,7 @@ page height.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import posixpath
 import shutil
@@ -46,6 +47,21 @@ DRAWING_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
 OFFICE_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 PACKAGE_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 OUTPUT_SUFFIX = ".note.taking.format.pdf"
+
+
+def get_version() -> str:
+    """Read the version maintained by Release Please."""
+    bundle_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+    manifest_path = bundle_dir / ".release-please-manifest.json"
+    with manifest_path.open(encoding="utf-8") as manifest_file:
+        manifest = json.load(manifest_file)
+    version = manifest.get(".") if isinstance(manifest, dict) else None
+    if not isinstance(version, str):
+        raise ValueError(f"Release version is missing from {manifest_path}.")
+    official_marker = bundle_dir / "official-build.marker"
+    if not getattr(sys, "frozen", False) or not official_marker.is_file():
+        return f"{version} (unofficial build)"
+    return version
 
 
 def find_libreoffice(explicit_path: Path | None = None) -> Path:
@@ -583,6 +599,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {get_version()}",
     )
     parser.add_argument(
         "input",

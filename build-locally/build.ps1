@@ -37,17 +37,44 @@ if ($LASTEXITCODE -ne 0) {
     throw 'Failed to download, verify, and extract LibreOffice.'
 }
 
-& $venvPython -m PyInstaller --noconfirm --clean --onefile `
-    --name pptx-to-letter-pdf `
-    --add-data 'dist\LibreOffice;LibreOffice' `
-    convert_pptx_to_letter_pdf.py
-if ($LASTEXITCODE -ne 0) {
-    throw 'PyInstaller failed to bundle LibreOffice.'
+$pyInstallerArguments = @(
+    '--noconfirm',
+    '--clean',
+    '--onefile',
+    '--name',
+    'pptx-to-letter-pdf',
+    '--add-data',
+    'dist\LibreOffice;LibreOffice',
+    '--add-data',
+    '.release-please-manifest.json;.',
+    'convert_pptx_to_letter_pdf.py'
+)
+$officialBuildMarker = Join-Path $env:TEMP "pdf-standardizer-official-build-$PID.marker"
+if ($env:GITHUB_ACTIONS -eq 'true') {
+    Set-Content -LiteralPath $officialBuildMarker -Value 'GitHub Actions' -NoNewline
+    $pyInstallerArguments += @('--add-data', "$officialBuildMarker;.")
+}
+
+try {
+    & $venvPython -m PyInstaller @pyInstallerArguments
+    if ($LASTEXITCODE -ne 0) {
+        throw 'PyInstaller failed to bundle LibreOffice.'
+    }
+}
+finally {
+    if (Test-Path -LiteralPath $officialBuildMarker) {
+        Remove-Item -LiteralPath $officialBuildMarker
+    }
 }
 
 & '.\dist\pptx-to-letter-pdf.exe' --help
 if ($LASTEXITCODE -ne 0) {
     throw 'Bundled executable failed its --help check.'
+}
+
+& '.\dist\pptx-to-letter-pdf.exe' --version
+if ($LASTEXITCODE -ne 0) {
+    throw 'Bundled executable failed its --version check.'
 }
 
 $fixture = 'test-data\test.pptx'
