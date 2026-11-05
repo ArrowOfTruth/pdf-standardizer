@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/ArrowOfTruth/pdf-standardizer/compare/pdf-standardizer-v0.8.0...pdf-standardizer-v0.9.0) (2026-11-05)
+
+
+### Features
+
+* add desktop GUI for no-argument launches ([5a1807e](https://github.com/ArrowOfTruth/pdf-standardizer/commit/5a1807e830abab5196582e9de0259395f1c1f1fc))
+
 ## [0.8.0](https://github.com/ArrowOfTruth/pdf-standardizer/compare/pdf-standardizer-v0.7.0...pdf-standardizer-v0.8.0) (2026-10-20)
 
 
