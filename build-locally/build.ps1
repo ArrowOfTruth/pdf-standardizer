@@ -56,13 +56,15 @@ $pyInstallerArguments = @(
     '.release-please-manifest.json;.',
     'convert_pptx_to_letter_pdf.py'
 )
-$officialBuildMarker = Join-Path $env:TEMP "pdf-standardizer-official-build-$PID.marker"
-if ($env:GITHUB_ACTIONS -eq 'true') {
-    Set-Content -LiteralPath $officialBuildMarker -Value 'GitHub Actions' -NoNewline
-    $pyInstallerArguments += @('--add-data', "$officialBuildMarker;.")
-}
-
+$officialBuildMarkerDirectory = Join-Path $env:TEMP "pdf-standardizer-official-build-$PID"
+$officialBuildMarker = Join-Path $officialBuildMarkerDirectory 'official-build.marker'
 try {
+    if ($env:GITHUB_ACTIONS -eq 'true') {
+        New-Item -ItemType Directory -Path $officialBuildMarkerDirectory | Out-Null
+        Set-Content -LiteralPath $officialBuildMarker -Value 'GitHub Actions' -NoNewline
+        $pyInstallerArguments += @('--add-data', "$officialBuildMarker;.")
+    }
+
     Write-Host 'Packaging the executable with PyInstaller (this may take several minutes)...'
     & $venvPython -m PyInstaller @pyInstallerArguments
     if ($LASTEXITCODE -ne 0) {
@@ -70,8 +72,8 @@ try {
     }
 }
 finally {
-    if (Test-Path -LiteralPath $officialBuildMarker) {
-        Remove-Item -LiteralPath $officialBuildMarker
+    if (Test-Path -LiteralPath $officialBuildMarkerDirectory) {
+        Remove-Item -LiteralPath $officialBuildMarkerDirectory -Recurse
     }
 }
 
@@ -82,9 +84,20 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host 'Checking the bundled executable version output...'
-& '.\dist\pptx-to-letter-pdf.exe' --version
+$versionOutput = & '.\dist\pptx-to-letter-pdf.exe' --version
 if ($LASTEXITCODE -ne 0) {
     throw 'Bundled executable failed its --version check.'
+}
+$reportedVersion = ($versionOutput -join [Environment]::NewLine).Trim()
+Write-Host "Version reported: $reportedVersion"
+$expectedVersion = 'unofficial'
+if ($env:GITHUB_ACTIONS -eq 'true') {
+    $releaseManifest = Get-Content -Raw -LiteralPath '.release-please-manifest.json' |
+        ConvertFrom-Json
+    $expectedVersion = [string]$releaseManifest.PSObject.Properties['.'].Value
+}
+if ($reportedVersion -ne $expectedVersion) {
+    throw "Expected --version to report '$expectedVersion', but got '$reportedVersion'."
 }
 
 $fixture = 'test-data\test.pptx'
