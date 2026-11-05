@@ -512,6 +512,16 @@ class FitToPagesTests(unittest.TestCase):
 class OutputHandlingTests(unittest.TestCase):
     """Tests for protecting existing conversion results."""
 
+    def test_no_arguments_launches_gui(self) -> None:
+        """Open the GUI when the executable is started without arguments."""
+        with (
+            patch.object(sys, "argv", ["converter"]),
+            patch.object(converter, "launch_gui") as launch_gui,
+        ):
+            converter.main()
+
+        launch_gui.assert_called_once_with()
+
     def test_does_not_overwrite_existing_pdf_without_flag(self) -> None:
         """Preserve an existing PDF and report that overwrite was not enabled."""
         with tempfile.TemporaryDirectory() as temp_dir:

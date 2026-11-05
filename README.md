@@ -8,8 +8,8 @@ does not require Microsoft PowerPoint or a separate LibreOffice installation.
 Download `pptx-to-letter-pdf.exe` from the
 [latest GitHub Release](https://github.com/ArrowOfTruth/pdf-standardizer/releases/latest).
 Also download `THIRD-PARTY-NOTICES.txt` from the same release to retain the
-bundled LibreOffice license notices. Run the executable from PowerShell or
-Command Prompt:
+bundled LibreOffice license notices. Double-click the executable to open its
+desktop interface, or run it from PowerShell or Command Prompt with an input:
 
 ```powershell
 .\pptx-to-letter-pdf.exe presentation.pptx
@@ -22,6 +22,11 @@ PPTX supplies long-description speaker notes. A PDF without a PPTX is fitted
 directly; a PPTX without a PDF is rendered with LibreOffice first. The output is
 named `<input name>.note.taking.format.pdf` (with the input extension removed),
 for example `document.note.taking.format.pdf`.
+
+The desktop interface can convert a file or folder, search subfolders, adjust
+line spacing, and replace existing outputs when requested. Starting the
+executable without command-line arguments opens the interface; supplying
+arguments continues to use the command-line options below.
 
 The executable extracts its bundled LibreOffice runtime to a temporary
 directory when launched, so startup takes longer and requires over 1 GB of

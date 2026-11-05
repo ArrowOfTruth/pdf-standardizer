@@ -563,12 +563,23 @@ def _add_rule_lines(
     page.replace_contents(stream)
 
 
+def launch_gui() -> None:
+    """Launch the desktop interface without importing Tkinter for CLI runs."""
+    from converter_gui import launch_gui as show_gui
+
+    show_gui()
+
+
 def main() -> None:
     """Parse command-line arguments and convert one file or a folder.
 
     Raises:
         SystemExit: If arguments are invalid or one or more conversions fail.
     """
+    if len(sys.argv) == 1:
+        launch_gui()
+        return
+
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
