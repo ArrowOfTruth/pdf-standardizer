@@ -36,8 +36,8 @@ Release:
 ```
 
 The version is read from the Release Please manifest, so release builds report
-the same version as their GitHub Release. Builds made outside GitHub Actions
-append `(unofficial build)` to the displayed version.
+only the numeric version of their GitHub Release. Builds made outside GitHub
+Actions display only `unofficial`.
 
 The executable extracts its bundled LibreOffice runtime to a temporary
 directory when launched, so startup takes longer and requires over 1 GB of

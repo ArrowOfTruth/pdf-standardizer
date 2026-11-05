@@ -60,7 +60,7 @@ def get_version() -> str:
         raise ValueError(f"Release version is missing from {manifest_path}.")
     official_marker = bundle_dir / "official-build.marker"
     if not getattr(sys, "frozen", False) or not official_marker.is_file():
-        return f"{version} (unofficial build)"
+        return "unofficial"
     return version
 
 
@@ -603,7 +603,7 @@ def main() -> None:
     parser.add_argument(
         "--version",
         action="version",
-        version=f"%(prog)s {get_version()}",
+        version=get_version(),
     )
     parser.add_argument(
         "input",
