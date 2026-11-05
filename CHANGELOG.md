@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/ArrowOfTruth/pdf-standardizer/compare/pdf-standardizer-v0.9.0...pdf-standardizer-v0.10.0) (2026-11-05)
+
+
+### Features
+
+* add release version CLI flag ([f376bd7](https://github.com/ArrowOfTruth/pdf-standardizer/commit/f376bd7fe6a9acc3a97147ca03158640033454d7))
+
 ## [0.9.0](https://github.com/ArrowOfTruth/pdf-standardizer/compare/pdf-standardizer-v0.8.0...pdf-standardizer-v0.9.0) (2026-11-05)
 
 
